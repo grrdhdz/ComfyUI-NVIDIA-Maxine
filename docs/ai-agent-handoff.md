@@ -274,6 +274,22 @@ Rules:
 The container currently receives `NGC_API_KEY` as an environment variable during
 `docker run`, because NIM startup may need it to fetch/cache resources.
 
+## Latest Verified State
+
+As of 2026-05-13, the user confirmed the Studio Voice flow works after the
+Comfy Desktop port-conflict fix.
+
+Important operational details:
+
+- `studio-voice-nim` must not publish host port `8000`.
+- Expected ports are `18000:8000` for NIM HTTP and `8001:8001` for Studio Voice
+  gRPC.
+- Docker Desktop may show only `18000:8000` until "Show all ports" is expanded;
+  confirm with `docker ps` if needed.
+- During startup, `FutureTimeoutError` from `check_channel()` means the gRPC
+  endpoint is still warming up. The user-facing setup log should phrase this as
+  `gRPC endpoint is still warming up.`
+
 ## Known Environment Facts
 
 Observed machine:
@@ -323,6 +339,13 @@ Initial snapshot:
 ```text
 commit: 40bd2cb feat: add ComfyUI Studio Voice NIM nodes
 tag:    snapshot-2026-05-13-studio-voice-nim-v1
+```
+
+Latest confirmed snapshot:
+
+```text
+commit: d23b7c0 chore: clarify studio voice grpc warmup logs
+tag:    snapshot-2026-05-13-studio-voice-desktop-port-fix-v1
 ```
 
 `nim-clients-upstream/` is ignored and should remain untracked. It was only used
