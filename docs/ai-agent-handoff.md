@@ -209,7 +209,7 @@ Inputs:
 Defaults:
 
 ```text
-image:             nvcr.io/nim/nvidia/relighting:1.1.0
+image:             nvcr.io/nim/nvidia/ai4m-relighting:1.1.0
 container_name:    relighting-nim
 manifest_profile:  <empty>
 force_pull:        false
@@ -515,7 +515,7 @@ Likely next steps:
 - Add automatic optional resampling node/setting if the user wants it.
 - Add container logs/status output in the setup node after container start.
 - Validate Relighting end-to-end after the user accepts NGC terms and pulls
-  `nvcr.io/nim/nvidia/relighting:1.1.0`.
+  `nvcr.io/nim/nvidia/ai4m-relighting:1.1.0`.
 - Add support for other NVIDIA Maxine NIMs from `nim-clients`.
 - Add a UX wrapper or example workflow JSON once the Studio Voice flow is stable.
 

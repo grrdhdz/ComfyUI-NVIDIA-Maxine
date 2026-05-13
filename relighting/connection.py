@@ -14,7 +14,7 @@ class RelightingConnection:
 
 @dataclass(frozen=True)
 class RelightingSetupSettings:
-    image: str = "nvcr.io/nim/nvidia/relighting:1.1.0"
+    image: str = "nvcr.io/nim/nvidia/ai4m-relighting:1.1.0"
     container_name: str = "relighting-nim"
     manifest_profile: str = ""
     force_pull: bool = False

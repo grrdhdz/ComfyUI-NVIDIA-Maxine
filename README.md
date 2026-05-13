@@ -160,7 +160,7 @@ video_path -----------------------> NVIDIA Relighting Apply -> output_video_path
 
 Defaults:
 
-- Image: `nvcr.io/nim/nvidia/relighting:1.1.0`
+- Image: `nvcr.io/nim/nvidia/ai4m-relighting:1.1.0`
 - Container: `relighting-nim`
 - gRPC: `127.0.0.1:8101`
 - NIM HTTP host port: `18100`

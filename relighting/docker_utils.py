@@ -37,7 +37,7 @@ except ImportError:  # pragma: no cover - direct imports outside package mode.
     )
 
 
-DEFAULT_IMAGE = "nvcr.io/nim/nvidia/relighting:1.1.0"
+DEFAULT_IMAGE = "nvcr.io/nim/nvidia/ai4m-relighting:1.1.0"
 DEFAULT_CONTAINER_NAME = "relighting-nim"
 DEFAULT_TARGET = "127.0.0.1:8101"
 DEFAULT_GRPC_HOST_PORT = 8101
@@ -60,7 +60,7 @@ def pull_image(
         progress=progress,
         image_label="Relighting",
         access_instructions=(
-            "The image name matches NVIDIA's Relighting NIM deployment documentation. "
+            "The image name matches NVIDIA Build's Relighting NIM deployment page. "
             "If pull access is denied, open "
             "https://docs.nvidia.com/nim/maxine/relighting/latest/getting-started.html "
             "while signed in, accept the Relighting NIM terms if prompted, then generate or reuse an "
