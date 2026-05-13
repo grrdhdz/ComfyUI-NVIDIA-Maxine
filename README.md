@@ -1,7 +1,8 @@
 # ComfyUI NVIDIA Maxine
 
-Custom nodes for running NVIDIA Maxine NIMs from ComfyUI. Phase 1 focuses on
-Studio Voice as an offline speech enhancement node for recorded audio.
+Custom nodes for running NVIDIA Maxine NIMs from ComfyUI. The first stable
+workflow is Studio Voice for recorded-speech enhancement. The package also
+includes a parallel Relighting NIM workflow for local MP4 relighting.
 
 ## Studio Voice Workflow
 
@@ -135,3 +136,41 @@ progress to ComfyUI logs. It tries Docker Engine API progress first when the
 Python Docker SDK is available, then falls back to Docker CLI output parsing.
 Logs include known byte percentage, downloaded/pulled layer counts, and
 periodic heartbeats while Docker is still working.
+
+## Relighting Workflow
+
+Relighting is implemented as a separate node family so it can coexist with
+Studio Voice without changing the audio workflow:
+
+```text
+NVIDIA Relighting Docker Setup
+    |
+    v
+NVIDIA Relighting Apply -> output_video_path
+```
+
+Advanced mode adds optional Docker/NIM overrides:
+
+```text
+NVIDIA Relighting Advanced Settings -> NVIDIA Relighting Docker Setup
+                                                |
+                                                v
+video_path -----------------------> NVIDIA Relighting Apply -> output_video_path
+```
+
+Defaults:
+
+- Image: `nvcr.io/nim/nvidia/relighting:1.1.0`
+- Container: `relighting-nim`
+- gRPC: `127.0.0.1:8101`
+- NIM HTTP host port: `18100`
+- NIM metrics host port: `19002`
+
+The Relighting setup node uses local Docker/NIM only. It does not call NVIDIA's
+remote preview API. Like Studio Voice, it logs Docker pull progress to ComfyUI
+logs and reuses an existing container/image unless `force_pull` is enabled.
+
+`NVIDIA Relighting Apply` accepts a local `.mp4` path and writes a local `.mp4`
+output. If `output_path` is empty, it saves to ComfyUI's output directory as
+`<input_stem>_relighting.mp4`. Version 1 does not convert MOV/WebM/etc.; convert
+to MP4/H.264 before this node.

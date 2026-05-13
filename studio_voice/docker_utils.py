@@ -447,7 +447,7 @@ def _pull_image_engine_api(
                 tracker.consume_cli_line(str(event))
             tracker.heartbeat()
         _emit(progress, tracker.final_summary())
-        return CommandResult(True, f"Studio Voice image is ready: {image}")
+        return CommandResult(True, f"NIM image is ready: {image}")
     except Exception as exc:
         _emit(
             progress,
@@ -467,7 +467,7 @@ def pull_image(
     login = ngc_login(api_key, username=username)
     if not login.ok:
         return CommandResult(False, "NGC Docker login failed:\n" + login.output)
-    _emit(progress, f"Pulling Studio Voice image: {image}")
+    _emit(progress, f"Pulling NIM image: {image}")
     key = _effective_key(api_key)
     pull = _pull_image_engine_api(key, image=image, username=username, progress=progress)
     if pull is None:
@@ -479,7 +479,7 @@ def pull_image(
             pull_progress=tracker,
         )
     if pull.ok:
-        return CommandResult(True, f"{login.output}\nStudio Voice image is ready: {image}")
+        return CommandResult(True, f"{login.output}\nNIM image is ready: {image}")
     diagnostic = (
         f"{login.output}\n"
         f"Docker pull failed for {image}:\n{pull.output}\n\n"

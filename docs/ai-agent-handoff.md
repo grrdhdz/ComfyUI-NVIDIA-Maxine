@@ -3,8 +3,9 @@
 ## Project Summary
 
 This repository implements ComfyUI custom nodes for NVIDIA Maxine NIMs. The
-current working scope is Studio Voice, used as an offline recorded-speech
-enhancer similar in purpose to Adobe Podcast Enhance Speech.
+first stable scope is Studio Voice, used as an offline recorded-speech enhancer
+similar in purpose to Adobe Podcast Enhance Speech. A parallel Relighting NIM
+workflow has been added for local MP4 video relighting.
 
 Primary user goal:
 
@@ -53,6 +54,10 @@ Main files:
 - `studio_voice/audio_utils.py`: ComfyUI AUDIO conversion helpers.
 - `studio_voice/connection.py`: `StudioVoiceConnection` and `StudioVoiceSetupSettings` dataclasses.
 - `studio_voice/interfaces/`: generated NVIDIA Studio Voice gRPC files vendored from `NVIDIA-Maxine/nim-clients`.
+- `relighting/docker_utils.py`: Relighting Docker Desktop / NGC / NIM lifecycle helpers.
+- `relighting/client.py`: local Relighting bidirectional gRPC client.
+- `relighting/connection.py`: `RelightingConnection` and `RelightingSetupSettings` dataclasses.
+- `relighting/interfaces/`: generated NVIDIA Relighting gRPC files vendored from `NVIDIA-Maxine/nim-clients`.
 - `docs/windows-docker-studio-voice.md`: Windows/Docker operational notes.
 
 The installed Comfy Desktop copy is expected at:
@@ -180,6 +185,128 @@ This node was introduced briefly and then folded into `NVIDIA Studio Voice
 Enhance` to simplify the workflow. Do not register it in `get_node_list()` unless
 the user explicitly asks for a separate preparation/debug node again.
 
+### NVIDIA Relighting Advanced Settings
+
+Purpose: optional technical override node for Relighting Docker/NIM setup.
+
+Output:
+
+- `RELIGHTING_SETUP_SETTINGS`
+
+Inputs:
+
+- `image`
+- `container_name`
+- `manifest_profile`
+- `force_pull`
+- `target`
+- `grpc_host_port`
+- `http_host_port`
+- `metrics_host_port`
+- `wait_timeout_s`
+- `ngc_username`
+
+Defaults:
+
+```text
+image:             nvcr.io/nim/nvidia/relighting:1.1.0
+container_name:    relighting-nim
+manifest_profile:  <empty>
+force_pull:        false
+target:            127.0.0.1:8101
+grpc_host_port:    8101
+http_host_port:    18100
+metrics_host_port: 19002
+wait_timeout_s:    1200
+ngc_username:      $oauthtoken
+```
+
+### NVIDIA Relighting Docker Setup
+
+Purpose: one user-friendly node that prepares and validates local Relighting
+NIM without changing Studio Voice nodes.
+
+Inputs:
+
+```text
+action:             setup_all
+ngc_api_key:        <user pastes NGC key>
+advanced_settings:  optional RELIGHTING_SETUP_SETTINGS connection
+```
+
+Actions:
+
+- `setup_all`: full setup flow.
+- `check_docker`: `docker info`.
+- `check_gpu`: validates `--gpus=all` using NVIDIA CUDA sample.
+- `ngc_login`: Docker login to `nvcr.io`.
+- `pull_relighting`: pull Relighting NIM image.
+- `start_relighting`: start/reuse local container.
+
+Outputs:
+
+- `RELIGHTING_CONNECTION`
+- `status` string
+
+Docker ports intentionally avoid Comfy Desktop and Studio Voice defaults:
+
+```text
+HTTP:    18100:8000
+gRPC:    8101:8001
+metrics: 19002:9002
+```
+
+Setup detects an existing `relighting-nim` with wrong or old port mappings and
+recreates it. If the image/container already matches and `force_pull=false`, it
+reuses them.
+
+### NVIDIA Relighting Apply
+
+Purpose: process a local MP4 through the local Relighting NIM over gRPC.
+
+Inputs:
+
+- `video_path`
+- `relighting_connection`
+- `hdri_preset`
+- `foreground_gain`
+- `background_gain`
+- `blur`
+- `specular`
+- `output_path`
+- `pan`
+- `vertical_fov`
+- `autorotate`
+- `rotation_rate`
+- `background_source`
+- `background_image_path`
+- `background_color`
+- `bitrate`
+- `idr_interval`
+- `lossless`
+- `timeout_s`
+
+Outputs:
+
+- `output_video_path`
+- `status`
+
+The node validates that `video_path` exists and has `.mp4` extension. It does
+not convert formats in v1. If `output_path` is empty, it writes to ComfyUI's
+output directory as `<input_stem>_relighting.mp4`.
+
+The client uses the official Relighting service shape:
+
+```text
+VideoRelightingService.Relight
+config -> optional image chunks -> MP4 chunks
+server progress/video bytes -> local output MP4
+```
+
+Vendored Relighting stubs are copied from
+`nim-clients-upstream/relighting/interfaces`; do not vendor the whole upstream
+repo into the package.
+
 ## Docker / NIM Behavior
 
 The ComfyUI node communicates with Docker through `docker.exe` using Python
@@ -195,6 +322,18 @@ ComfyUI node
   -> Studio Voice NIM container
   -> local gRPC 127.0.0.1:8001
   -> NVIDIA Studio Voice Enhance node
+```
+
+Relighting follows the same Windows Docker pattern:
+
+```text
+ComfyUI node
+  -> Python subprocess
+  -> docker.exe
+  -> Docker Desktop Linux engine
+  -> Relighting NIM container
+  -> local gRPC 127.0.0.1:8101
+  -> NVIDIA Relighting Apply node
 ```
 
 The user wants Windows + Docker Desktop operation. They do not want to work in
@@ -332,7 +471,7 @@ C:\Users\gerhh\Documents\IA\ComfyDesktop\.venv\Scripts\python.exe -c "import asy
 Expected:
 
 ```text
-['NVIDIA Studio Voice Advanced Settings', 'NVIDIA Studio Voice Docker Setup', 'NVIDIA Studio Voice Enhance']
+['NVIDIA Studio Voice Advanced Settings', 'NVIDIA Studio Voice Docker Setup', 'NVIDIA Studio Voice Enhance', 'NVIDIA Relighting Advanced Settings', 'NVIDIA Relighting Docker Setup', 'NVIDIA Relighting Apply']
 ```
 
 When copying to Comfy Desktop, only copy project files, not
@@ -361,6 +500,11 @@ commit: 92aa3ab feat: fold audio resampling into studio voice enhance
 tag:    snapshot-2026-05-13-studio-voice-enhance-autoresample-v1
 ```
 
+Relighting implementation snapshot should be tagged after it is validated in
+Comfy Desktop. Do not run the first Relighting Docker pull casually: the NIM
+image may be large, and the user should intentionally trigger it from the setup
+node.
+
 `nim-clients-upstream/` is ignored and should remain untracked. It was only used
 as a reference clone to vendor the generated Studio Voice proto files.
 
@@ -370,6 +514,8 @@ Likely next steps:
 
 - Add automatic optional resampling node/setting if the user wants it.
 - Add container logs/status output in the setup node after container start.
+- Validate Relighting end-to-end after the user accepts NGC terms and pulls
+  `nvcr.io/nim/nvidia/relighting:1.1.0`.
 - Add support for other NVIDIA Maxine NIMs from `nim-clients`.
 - Add a UX wrapper or example workflow JSON once the Studio Voice flow is stable.
 
