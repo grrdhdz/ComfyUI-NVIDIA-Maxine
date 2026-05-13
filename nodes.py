@@ -3,6 +3,8 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
+import grpc
+
 try:
     from comfy_api.latest import ComfyExtension, io
 except ImportError:  # pragma: no cover - direct unit-style imports outside ComfyUI.
@@ -74,6 +76,7 @@ try:
         docker_info as relighting_docker_info,
         ngc_login as relighting_ngc_login,
         pull_image as pull_relighting_image,
+        collect_diagnostics as collect_relighting_diagnostics,
         setup_all_relighting,
         start_relighting_container,
     )
@@ -93,6 +96,7 @@ except ImportError:
         docker_info as relighting_docker_info,
         ngc_login as relighting_ngc_login,
         pull_image as pull_relighting_image,
+        collect_diagnostics as collect_relighting_diagnostics,
         setup_all_relighting,
         start_relighting_container,
     )
@@ -753,28 +757,44 @@ class NvidiaRelightingApply(io.ComfyNode):
             raise ValueError("video_path is empty. Provide a local MP4 file path.")
         clean_output_path = str(output_path or "").strip().strip('"') or _default_output_path(clean_video_path)
         logging.info("[NVIDIA Relighting Apply] Starting relighting for %s.", clean_video_path)
-        destination, total_bytes, elapsed = relight_video(
-            video_path=clean_video_path,
-            output_path=clean_output_path,
-            target=target,
-            hdri_preset=hdri_preset,
-            foreground_gain=foreground_gain,
-            background_gain=background_gain,
-            blur=blur,
-            specular=specular,
-            pan=pan,
-            vertical_fov=vertical_fov,
-            autorotate=autorotate,
-            rotation_rate=rotation_rate,
-            background_source=background_source,
-            background_image_path=str(background_image_path or "").strip().strip('"') or None,
-            background_color=background_color,
-            bitrate=bitrate,
-            idr_interval=idr_interval,
-            lossless=lossless,
-            timeout_s=timeout_s,
-            progress=lambda msg: logging.info("[NVIDIA Relighting Apply] %s", msg),
-        )
+        try:
+            destination, total_bytes, elapsed = relight_video(
+                video_path=clean_video_path,
+                output_path=clean_output_path,
+                target=target,
+                hdri_preset=hdri_preset,
+                foreground_gain=foreground_gain,
+                background_gain=background_gain,
+                blur=blur,
+                specular=specular,
+                pan=pan,
+                vertical_fov=vertical_fov,
+                autorotate=autorotate,
+                rotation_rate=rotation_rate,
+                background_source=background_source,
+                background_image_path=str(background_image_path or "").strip().strip('"') or None,
+                background_color=background_color,
+                bitrate=bitrate,
+                idr_interval=idr_interval,
+                lossless=lossless,
+                timeout_s=timeout_s,
+                progress=lambda msg: logging.info("[NVIDIA Relighting Apply] %s", msg),
+            )
+        except grpc.RpcError as exc:
+            code = exc.code() if hasattr(exc, "code") else "unknown"
+            details = exc.details() if hasattr(exc, "details") else str(exc)
+            container_name = getattr(relighting_connection, "container_name", DEFAULT_RELIGHTING_CONTAINER_NAME)
+            diagnostics = collect_relighting_diagnostics(container_name=container_name, tail=80)
+            raise RuntimeError(
+                "Relighting NIM closed the gRPC stream during inference. "
+                "The Docker container may still show as running, but the internal Relighting gRPC worker can crash "
+                "after a failed video pipeline request. Run NVIDIA Relighting Docker Setup again to restart/recover it. "
+                "If this repeats, it is likely a NIM/runtime compatibility issue rather than a ComfyUI workflow issue. "
+                "The official NVIDIA relighting client reproduced the same End of TCP stream behavior in this environment.\n\n"
+                f"gRPC code: {code}\n"
+                f"gRPC details: {details}\n\n"
+                f"{diagnostics}"
+            ) from exc
         status = (
             f"OK: Relighting completed in {elapsed:.1f}s.\n"
             f"Output: {destination}\n"

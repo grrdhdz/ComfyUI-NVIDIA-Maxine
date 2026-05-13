@@ -435,6 +435,26 @@ Important operational details:
 - Do not re-register `NVIDIA Studio Voice Prepare Audio` unless the user asks for
   a separate debugging/preprocessing node again.
 
+Relighting status as of 2026-05-13:
+
+- Correct image is `nvcr.io/nim/nvidia/ai4m-relighting:1.1.0`; the older
+  `nvcr.io/nim/nvidia/relighting:1.1.0` returns `Access Denied`.
+- The image pulls and the NIM reaches HTTP ready plus gRPC SERVING on this
+  Windows Docker Desktop system.
+- Actual inference currently fails with `StatusCode.UNAVAILABLE: End of TCP
+  stream`. The official NVIDIA `nim-clients` Relighting client reproduces the
+  same failure against the same container and test MP4, so this is not isolated
+  to this ComfyUI client.
+- Container logs show the Relighting gRPC worker dies and becomes defunct after
+  the video pipeline reaches `decoder→transform→encoder`, with repeated
+  `S_EXT_CTRLS for CUDA_GPU_ID failed`. The Docker container itself can remain
+  `running`, and HTTP `/v1/health/ready` can still report ready while host gRPC
+  port `8101` no longer accepts calls.
+- `NVIDIA Relighting Docker Setup` now restarts a running Relighting container
+  when the container exists but host gRPC is not reachable. `NVIDIA Relighting
+  Apply` now converts raw `grpc.RpcError` failures into a diagnostic RuntimeError
+  with Docker state, ports, and recent container logs.
+
 ## Known Environment Facts
 
 Observed machine:

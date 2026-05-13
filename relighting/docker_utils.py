@@ -118,6 +118,22 @@ def container_has_conflicting_or_wrong_ports(
     return False
 
 
+def collect_diagnostics(container_name: str = DEFAULT_CONTAINER_NAME, tail: int = 80) -> str:
+    sections: list[str] = []
+    state = _run(["docker", "inspect", "-f", "{{json .State}}", container_name], timeout_s=30)
+    if state.ok:
+        sections.append("Docker state:\n" + state.output.strip())
+    ports = _run(["docker", "port", container_name], timeout_s=30)
+    if ports.ok:
+        sections.append("Docker ports:\n" + ports.output.strip())
+    logs = _run(["docker", "logs", "--tail", str(max(20, int(tail))), container_name], timeout_s=30)
+    if logs.ok:
+        sections.append("Recent container logs:\n" + logs.output.strip())
+    if not sections:
+        return "No Docker diagnostics were available."
+    return "\n\n".join(sections)
+
+
 def start_relighting_container(
     *,
     api_key: str,
@@ -141,8 +157,19 @@ def start_relighting_container(
         status = "missing"
 
     if status == "running":
-        _emit(progress, f"Container phase: {settings.container_name} is already running.")
-        return CommandResult(True, f"{settings.container_name} is already running on gRPC port {settings.grpc_host_port}.")
+        grpc_error = check_channel(target=settings.target, timeout_s=3.0)
+        if grpc_error is None:
+            _emit(progress, f"Container phase: {settings.container_name} is already running.")
+            return CommandResult(True, f"{settings.container_name} is already running on gRPC port {settings.grpc_host_port}.")
+        _emit(
+            progress,
+            "Container phase: existing Relighting container is running but gRPC is not reachable. "
+            f"Restarting it. Last gRPC error: {grpc_error}",
+        )
+        restarted = _run(["docker", "restart", settings.container_name], timeout_s=180)
+        if restarted.ok:
+            return CommandResult(True, f"{settings.container_name} restarted; waiting for gRPC on host port {settings.grpc_host_port}.")
+        return restarted
 
     if status not in ("missing", ""):
         _emit(progress, f"Container phase: starting existing stopped container {settings.container_name}.")
