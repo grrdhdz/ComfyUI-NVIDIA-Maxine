@@ -277,7 +277,8 @@ The container currently receives `NGC_API_KEY` as an environment variable during
 ## Latest Verified State
 
 As of 2026-05-13, the user confirmed the Studio Voice flow works after the
-Comfy Desktop port-conflict fix.
+Comfy Desktop port-conflict fix and after folding audio resampling directly into
+`NVIDIA Studio Voice Enhance`.
 
 Important operational details:
 
@@ -289,6 +290,11 @@ Important operational details:
 - During startup, `FutureTimeoutError` from `check_channel()` means the gRPC
   endpoint is still warming up. The user-facing setup log should phrase this as
   `gRPC endpoint is still warming up.`
+- The current simplified workflow is `Load Audio -> NVIDIA Studio Voice Enhance`.
+  `Enhance` uses `48k-hq` internally and resamples source audio to `48000 Hz`
+  automatically.
+- Do not re-register `NVIDIA Studio Voice Prepare Audio` unless the user asks for
+  a separate debugging/preprocessing node again.
 
 ## Known Environment Facts
 
@@ -346,6 +352,13 @@ Latest confirmed snapshot:
 ```text
 commit: d23b7c0 chore: clarify studio voice grpc warmup logs
 tag:    snapshot-2026-05-13-studio-voice-desktop-port-fix-v1
+```
+
+Latest simplified UX snapshot:
+
+```text
+commit: 92aa3ab feat: fold audio resampling into studio voice enhance
+tag:    snapshot-2026-05-13-studio-voice-enhance-autoresample-v1
 ```
 
 `nim-clients-upstream/` is ignored and should remain untracked. It was only used
