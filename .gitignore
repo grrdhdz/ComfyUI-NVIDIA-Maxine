@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+
+# Upstream reference clone used during development; do not vendor it.
+nim-clients-upstream/
+
+# Local/editor noise
+.env
+.venv/
+.vscode/
+
