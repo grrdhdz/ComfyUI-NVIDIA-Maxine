@@ -5,10 +5,23 @@ Studio Voice as an offline speech enhancement node for recorded audio.
 
 ## Studio Voice Workflow
 
-Use ComfyUI's built-in audio nodes:
+Simple mode uses ComfyUI's built-in audio nodes plus the Studio Voice setup
+connection:
 
 ```text
+NVIDIA Studio Voice Docker Setup
+    |
+    v
 Load Audio -> NVIDIA Studio Voice Enhance -> Save Audio
+```
+
+Advanced mode adds one optional settings node before setup:
+
+```text
+NVIDIA Studio Voice Advanced Settings -> NVIDIA Studio Voice Docker Setup
+                                                |
+                                                v
+Load Audio -----------------------> NVIDIA Studio Voice Enhance -> Save Audio
 ```
 
 The node calls a locally hosted Studio Voice NIM over gRPC at
@@ -27,6 +40,10 @@ setup_all_transactional
 That single action runs Docker detection, GPU validation, NGC login, image pull,
 container start, and waits for the local gRPC endpoint.
 
+The setup node exposes only the NGC key and setup action in the normal UI. It
+uses safe internal defaults for image, container name, target, model type, file
+size limit, timeout, and NGC username.
+
 The setup node outputs `STUDIO_VOICE_CONNECTION`. Connect it to
 `NVIDIA Studio Voice Enhance` so the working node receives the verified target
 and model settings.
@@ -39,7 +56,9 @@ By default the setup is idempotent:
 - If the container is already running, it reuses it.
 - If the container exists but is stopped, it starts it.
 - If the image already exists, it does not pull again.
-- Enable `force_pull` only when you intentionally want to refresh the NIM image.
+- Connect `NVIDIA Studio Voice Advanced Settings` only when you intentionally
+  need to override technical Docker/NIM values such as `force_pull`, image,
+  target, model type, or timeouts.
 
 Advanced step-by-step actions are also available:
 
@@ -61,8 +80,8 @@ Username: $oauthtoken
 Password: <NGC API key>
 ```
 
-The setup node exposes `ngc_username` as an advanced field and defaults it to
-the literal `$oauthtoken`. This is not your NVIDIA account email.
+The advanced settings node exposes `ngc_username` and defaults it to the
+literal `$oauthtoken`. This is not your NVIDIA account email.
 
 Before the first pull, sign in at NVIDIA Build and accept the Studio Voice NIM
 Terms of Use:
@@ -74,6 +93,12 @@ causes are missing Terms acceptance, a key without `NGC Catalog`, or an account
 without access to this downloadable NIM.
 
 ## Controls
+
+The normal `Enhance` flow needs only `audio` and `studio_voice_connection`.
+When that connection is present, it is the source of truth for target, model
+type, and streaming mode.
+
+Fallback advanced controls remain available for direct/manual use:
 
 - `target`: local gRPC target, usually `127.0.0.1:8001`.
 - `model_type`: `48k-hq`, `48k-ll`, or `16k-hq`.
@@ -98,3 +123,11 @@ Docker GPU support requires Docker Desktop's WSL2 backend, but all commands and
 ComfyUI operation can still be done from Windows/PowerShell.
 
 See `docs/windows-docker-studio-voice.md` for setup notes.
+
+## Docker Pull Logs
+
+During long Studio Voice image downloads, the setup node writes aggregate pull
+progress to ComfyUI logs. It tries Docker Engine API progress first when the
+Python Docker SDK is available, then falls back to Docker CLI output parsing.
+Logs include known byte percentage, downloaded/pulled layer counts, and
+periodic heartbeats while Docker is still working.

@@ -11,10 +11,15 @@ except ImportError:  # pragma: no cover - direct unit-style imports outside Comf
 try:
     from .studio_voice.audio_utils import comfy_audio_to_numpy, expected_sample_rate, numpy_to_comfy_audio
     from .studio_voice.client import MODEL_TYPES, check_channel, enhance_audio
-    from .studio_voice.connection import StudioVoiceConnection
+    from .studio_voice.connection import StudioVoiceConnection, StudioVoiceSetupSettings
     from .studio_voice.docker_utils import (
         DEFAULT_CONTAINER_NAME,
+        DEFAULT_FILE_SIZE_LIMIT,
         DEFAULT_IMAGE,
+        DEFAULT_MODEL_TYPE,
+        DEFAULT_NGC_USERNAME,
+        DEFAULT_TARGET,
+        DEFAULT_WAIT_TIMEOUT_S,
         docker_gpu_check,
         docker_info,
         ngc_login,
@@ -25,10 +30,15 @@ try:
 except ImportError:
     from studio_voice.audio_utils import comfy_audio_to_numpy, expected_sample_rate, numpy_to_comfy_audio
     from studio_voice.client import MODEL_TYPES, check_channel, enhance_audio
-    from studio_voice.connection import StudioVoiceConnection
+    from studio_voice.connection import StudioVoiceConnection, StudioVoiceSetupSettings
     from studio_voice.docker_utils import (
         DEFAULT_CONTAINER_NAME,
+        DEFAULT_FILE_SIZE_LIMIT,
         DEFAULT_IMAGE,
+        DEFAULT_MODEL_TYPE,
+        DEFAULT_NGC_USERNAME,
+        DEFAULT_TARGET,
+        DEFAULT_WAIT_TIMEOUT_S,
         docker_gpu_check,
         docker_info,
         ngc_login,
@@ -39,6 +49,130 @@ except ImportError:
 
 
 StudioVoiceConnectionIO = io.Custom("STUDIO_VOICE_CONNECTION")
+StudioVoiceSetupSettingsIO = io.Custom("STUDIO_VOICE_SETUP_SETTINGS")
+
+
+def _normalize_setup_settings(settings: StudioVoiceSetupSettings | None) -> StudioVoiceSetupSettings:
+    if not isinstance(settings, StudioVoiceSetupSettings):
+        settings = StudioVoiceSetupSettings()
+
+    model_type = settings.model_type if settings.model_type in MODEL_TYPES else DEFAULT_MODEL_TYPE
+    try:
+        file_size_limit = int(settings.file_size_limit)
+    except (TypeError, ValueError):
+        file_size_limit = DEFAULT_FILE_SIZE_LIMIT
+    if file_size_limit < 1048576 or file_size_limit > 2147483647:
+        file_size_limit = DEFAULT_FILE_SIZE_LIMIT
+    try:
+        wait_timeout_s = float(settings.wait_timeout_s)
+    except (TypeError, ValueError):
+        wait_timeout_s = DEFAULT_WAIT_TIMEOUT_S
+    if wait_timeout_s != wait_timeout_s or wait_timeout_s < 30.0 or wait_timeout_s > 7200.0:
+        wait_timeout_s = DEFAULT_WAIT_TIMEOUT_S
+
+    ngc_username = (settings.ngc_username or DEFAULT_NGC_USERNAME).strip() or DEFAULT_NGC_USERNAME
+    if ngc_username.isdigit():
+        ngc_username = DEFAULT_NGC_USERNAME
+
+    return StudioVoiceSetupSettings(
+        image=(settings.image or DEFAULT_IMAGE).strip() or DEFAULT_IMAGE,
+        container_name=(settings.container_name or DEFAULT_CONTAINER_NAME).strip() or DEFAULT_CONTAINER_NAME,
+        model_profile=(settings.model_profile or "").strip(),
+        file_size_limit=file_size_limit,
+        force_pull=bool(settings.force_pull),
+        target=(settings.target or DEFAULT_TARGET).strip() or DEFAULT_TARGET,
+        model_type=model_type,
+        wait_timeout_s=wait_timeout_s,
+        ngc_username=ngc_username,
+    )
+
+
+def _settings_summary(settings: StudioVoiceSetupSettings, source: str) -> str:
+    profile = settings.model_profile or "<auto>"
+    return (
+        f"Settings source: {source}\n"
+        f"image={settings.image}\n"
+        f"container_name={settings.container_name}\n"
+        f"model_profile={profile}\n"
+        f"file_size_limit={settings.file_size_limit}\n"
+        f"force_pull={settings.force_pull}\n"
+        f"target={settings.target}\n"
+        f"model_type={settings.model_type}\n"
+        f"wait_timeout_s={settings.wait_timeout_s:.0f}\n"
+        f"ngc_username={settings.ngc_username}"
+    )
+
+
+class NvidiaStudioVoiceAdvancedSettings(io.ComfyNode):
+    @classmethod
+    def define_schema(cls) -> io.Schema:
+        return io.Schema(
+            node_id="NvidiaStudioVoiceAdvancedSettings",
+            display_name="NVIDIA Studio Voice Advanced Settings",
+            category="NVIDIA Maxine/Setup",
+            description="Optional technical overrides for the Studio Voice Docker Setup node.",
+            search_aliases=["studio voice advanced", "nvidia nim settings", "docker settings"],
+            inputs=[
+                io.String.Input("image", default=DEFAULT_IMAGE),
+                io.String.Input("container_name", default=DEFAULT_CONTAINER_NAME),
+                io.String.Input(
+                    "model_profile",
+                    default="",
+                    tooltip="Optional NIM_MODEL_PROFILE override. Leave empty to let NIM choose.",
+                ),
+                io.Int.Input(
+                    "file_size_limit",
+                    default=DEFAULT_FILE_SIZE_LIMIT,
+                    min=1048576,
+                    max=2147483647,
+                    step=1048576,
+                ),
+                io.Boolean.Input(
+                    "force_pull",
+                    default=False,
+                    tooltip="When false, existing images/containers are reused. Enable only to refresh the NIM image.",
+                ),
+                io.String.Input("target", default=DEFAULT_TARGET),
+                io.Combo.Input("model_type", options=list(MODEL_TYPES), default=DEFAULT_MODEL_TYPE),
+                io.Float.Input("wait_timeout_s", default=DEFAULT_WAIT_TIMEOUT_S, min=30.0, max=7200.0, step=30.0),
+                io.String.Input(
+                    "ngc_username",
+                    default=DEFAULT_NGC_USERNAME,
+                    tooltip="NVIDIA deploy docs use the literal username $oauthtoken for API-key Docker login.",
+                ),
+            ],
+            outputs=[
+                StudioVoiceSetupSettingsIO.Output("advanced_settings"),
+            ],
+        )
+
+    @classmethod
+    def execute(
+        cls,
+        image,
+        container_name,
+        model_profile,
+        file_size_limit,
+        force_pull,
+        target,
+        model_type,
+        wait_timeout_s,
+        ngc_username,
+    ) -> io.NodeOutput:
+        settings = _normalize_setup_settings(
+            StudioVoiceSetupSettings(
+                image=image,
+                container_name=container_name,
+                model_profile=model_profile,
+                file_size_limit=file_size_limit,
+                force_pull=force_pull,
+                target=target,
+                model_type=model_type,
+                wait_timeout_s=wait_timeout_s,
+                ngc_username=ngc_username,
+            )
+        )
+        return io.NodeOutput(settings)
 
 
 class NvidiaStudioVoiceEnhance(io.ComfyNode):
@@ -52,11 +186,11 @@ class NvidiaStudioVoiceEnhance(io.ComfyNode):
             search_aliases=["studio voice", "nvidia maxine", "enhance speech", "adobe podcast"],
             inputs=[
                 io.Audio.Input("audio"),
-                io.String.Input("target", default="127.0.0.1:8001", advanced=True),
-                io.Combo.Input("model_type", options=list(MODEL_TYPES), default="48k-hq", advanced=True),
+                StudioVoiceConnectionIO.Input("studio_voice_connection", optional=True),
+                io.String.Input("target", default=DEFAULT_TARGET, advanced=True),
+                io.Combo.Input("model_type", options=list(MODEL_TYPES), default=DEFAULT_MODEL_TYPE, advanced=True),
                 io.Boolean.Input("streaming", default=False, advanced=True),
                 io.Float.Input("timeout_s", default=120.0, min=1.0, max=3600.0, step=1.0, advanced=True),
-                StudioVoiceConnectionIO.Input("studio_voice_connection", optional=True),
             ],
             outputs=[
                 io.Audio.Output("enhanced_audio"),
@@ -67,16 +201,17 @@ class NvidiaStudioVoiceEnhance(io.ComfyNode):
     def execute(
         cls,
         audio,
-        target,
-        model_type,
-        streaming,
-        timeout_s,
         studio_voice_connection=None,
+        target=DEFAULT_TARGET,
+        model_type=DEFAULT_MODEL_TYPE,
+        streaming=False,
+        timeout_s=120.0,
     ) -> io.NodeOutput:
         if studio_voice_connection is not None:
             target = studio_voice_connection.target
             model_type = studio_voice_connection.model_type
             streaming = studio_voice_connection.streaming
+            timeout_s = getattr(studio_voice_connection, "timeout_s", timeout_s)
             if not getattr(studio_voice_connection, "ready", False):
                 live_error = check_channel(target=target, timeout_s=5.0)
                 if live_error is not None:
@@ -140,37 +275,7 @@ class NvidiaStudioVoiceDockerSetup(io.ComfyNode):
                         "environment that launched ComfyUI."
                     ),
                 ),
-                io.String.Input("image", default=DEFAULT_IMAGE, advanced=True),
-                io.String.Input("container_name", default=DEFAULT_CONTAINER_NAME, advanced=True),
-                io.String.Input(
-                    "model_profile",
-                    default="",
-                    advanced=True,
-                    tooltip="Optional NIM_MODEL_PROFILE override. Leave empty to let NIM choose.",
-                ),
-                io.Int.Input(
-                    "file_size_limit",
-                    default=36700160,
-                    min=1048576,
-                    max=2147483647,
-                    step=1048576,
-                    advanced=True,
-                ),
-                io.Boolean.Input(
-                    "force_pull",
-                    default=False,
-                    advanced=True,
-                    tooltip="When false, existing images/containers are reused. Enable only to refresh the NIM image.",
-                ),
-                io.String.Input("target", default="127.0.0.1:8001", advanced=True),
-                io.Combo.Input("model_type", options=list(MODEL_TYPES), default="48k-hq", advanced=True),
-                io.Float.Input("wait_timeout_s", default=900.0, min=30.0, max=7200.0, step=30.0, advanced=True),
-                io.String.Input(
-                    "ngc_username",
-                    default="$oauthtoken",
-                    advanced=True,
-                    tooltip="NVIDIA deploy docs use the literal username $oauthtoken for API-key Docker login.",
-                ),
+                StudioVoiceSetupSettingsIO.Input("advanced_settings", optional=True),
             ],
             outputs=[
                 StudioVoiceConnectionIO.Output("studio_voice_connection"),
@@ -184,32 +289,10 @@ class NvidiaStudioVoiceDockerSetup(io.ComfyNode):
         cls,
         action,
         ngc_api_key,
-        image,
-        container_name,
-        model_profile,
-        file_size_limit,
-        force_pull,
-        target,
-        model_type,
-        wait_timeout_s,
-        ngc_username,
+        advanced_settings=None,
     ) -> io.NodeOutput:
-        if model_type not in MODEL_TYPES:
-            model_type = "48k-hq"
-        try:
-            file_size_limit = int(file_size_limit)
-        except (TypeError, ValueError):
-            file_size_limit = 36700160
-        if file_size_limit < 1048576 or file_size_limit > 2147483647:
-            file_size_limit = 36700160
-        try:
-            wait_timeout_s = float(wait_timeout_s)
-        except (TypeError, ValueError):
-            wait_timeout_s = 900.0
-        if wait_timeout_s != wait_timeout_s or wait_timeout_s < 30.0 or wait_timeout_s > 7200.0:
-            wait_timeout_s = 900.0
-        if not isinstance(ngc_username, str) or not ngc_username.strip() or ngc_username.strip().isdigit():
-            ngc_username = "$oauthtoken"
+        settings_source = "Advanced Settings node" if advanced_settings is not None else "safe defaults"
+        settings = _normalize_setup_settings(advanced_settings)
 
         if action == "check_docker":
             logging.info("[NVIDIA Studio Voice Setup] Checking Docker Desktop.")
@@ -218,39 +301,39 @@ class NvidiaStudioVoiceDockerSetup(io.ComfyNode):
             result = docker_gpu_check(progress=lambda msg: logging.info("[NVIDIA Studio Voice Setup] %s", msg))
         elif action == "ngc_login":
             logging.info("[NVIDIA Studio Voice Setup] Logging into NGC.")
-            result = ngc_login(ngc_api_key, username=ngc_username)
+            result = ngc_login(ngc_api_key, username=settings.ngc_username)
         elif action == "pull_studio_voice":
-            logging.info("[NVIDIA Studio Voice Setup] Pulling Studio Voice image: %s", image)
+            logging.info("[NVIDIA Studio Voice Setup] Pulling Studio Voice image: %s", settings.image)
             result = pull_image(
                 ngc_api_key,
-                image=image,
-                username=ngc_username,
+                image=settings.image,
+                username=settings.ngc_username,
                 progress=lambda msg: logging.info("[NVIDIA Studio Voice Setup] %s", msg),
             )
         elif action == "start_studio_voice_transactional":
             logging.info("[NVIDIA Studio Voice Setup] Starting Studio Voice transactional container.")
             result = start_transactional_container(
                 api_key=ngc_api_key,
-                image=image,
-                container_name=container_name,
-                model_profile=model_profile,
-                file_size_limit=file_size_limit,
-                force_pull=bool(force_pull),
-                username=ngc_username,
+                image=settings.image,
+                container_name=settings.container_name,
+                model_profile=settings.model_profile,
+                file_size_limit=settings.file_size_limit,
+                force_pull=settings.force_pull,
+                username=settings.ngc_username,
                 progress=lambda msg: logging.info("[NVIDIA Studio Voice Setup] %s", msg),
             )
         elif action == "setup_all_transactional":
             logging.info("[NVIDIA Studio Voice Setup] Starting full transactional setup.")
             result = setup_all_transactional(
                 api_key=ngc_api_key,
-                image=image,
-                container_name=container_name,
-                model_profile=model_profile,
-                file_size_limit=file_size_limit,
-                target=target,
-                wait_timeout_s=wait_timeout_s,
-                force_pull=bool(force_pull),
-                username=ngc_username,
+                image=settings.image,
+                container_name=settings.container_name,
+                model_profile=settings.model_profile,
+                file_size_limit=settings.file_size_limit,
+                target=settings.target,
+                wait_timeout_s=settings.wait_timeout_s,
+                force_pull=settings.force_pull,
+                username=settings.ngc_username,
                 progress=lambda msg: logging.info("[NVIDIA Studio Voice Setup] %s", msg),
             )
         else:
@@ -259,26 +342,28 @@ class NvidiaStudioVoiceDockerSetup(io.ComfyNode):
         ready = False
         health_line = ""
         if result.ok:
-            health_error = check_channel(target=target, timeout_s=5.0)
+            health_error = check_channel(target=settings.target, timeout_s=5.0)
             ready = health_error is None
             if ready:
-                health_line = f"\nHealth: Studio Voice gRPC is reachable at {target}."
+                health_line = f"\nHealth: Studio Voice gRPC is reachable at {settings.target}."
             else:
-                health_line = f"\nHealth: Studio Voice gRPC is not reachable yet at {target}. Details: {health_error}"
+                health_line = f"\nHealth: Studio Voice gRPC is not reachable yet at {settings.target}. Details: {health_error}"
         connection = StudioVoiceConnection(
-            target=target,
-            model_type=model_type,
+            target=settings.target,
+            model_type=settings.model_type,
             streaming=False,
             ready=ready,
-            container_name=container_name,
+            container_name=settings.container_name,
         )
         prefix = "OK" if result.ok else "ERROR"
-        return io.NodeOutput(connection, f"{prefix}: {result.output}{health_line}")
+        status = f"{prefix}: {result.output}{health_line}\n\n{_settings_summary(settings, settings_source)}"
+        return io.NodeOutput(connection, status)
 
 
 class NvidiaMaxineExtension(ComfyExtension):
     async def get_node_list(self) -> list[type[io.ComfyNode]]:
         return [
+            NvidiaStudioVoiceAdvancedSettings,
             NvidiaStudioVoiceDockerSetup,
             NvidiaStudioVoiceEnhance,
         ]

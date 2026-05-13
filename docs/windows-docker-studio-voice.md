@@ -52,8 +52,17 @@ nvcr.io/nim/nvidia/studio-voice:latest
 You can do this from ComfyUI with `NVIDIA Studio Voice Docker Setup`:
 
 ```text
-check_docker -> check_gpu -> ngc_login -> pull_studio_voice -> start_studio_voice_transactional
+setup_all_transactional
 ```
+
+For normal use, the setup node only needs `ngc_api_key`. Technical overrides
+such as image, container name, target, `force_pull`, model type, timeout, and
+NGC username live in `NVIDIA Studio Voice Advanced Settings`, which connects to
+the setup node only when needed.
+
+During a long image pull, the setup node logs aggregate progress in ComfyUI:
+known byte percentage, downloaded/pulled layer counts, and heartbeat messages
+while Docker is still working.
 
 The setup node does not write the key to disk, but saved ComfyUI workflows may
 retain input values. For maximum hygiene, set `NGC_API_KEY` before launching

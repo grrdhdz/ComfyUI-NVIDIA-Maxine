@@ -22,6 +22,15 @@ NVIDIA Studio Voice Docker Setup
 Load Audio -> NVIDIA Studio Voice Enhance -> Save Audio / Preview Audio
 ```
 
+Advanced overrides are intentionally separated:
+
+```text
+NVIDIA Studio Voice Advanced Settings -> NVIDIA Studio Voice Docker Setup
+                                                |
+                                                v
+Load Audio -----------------------> NVIDIA Studio Voice Enhance -> Save Audio
+```
+
 ## Current Implementation
 
 The package is a ComfyUI V3 custom node package using:
@@ -42,7 +51,7 @@ Main files:
 - `studio_voice/docker_utils.py`: Docker Desktop / NGC / NIM lifecycle helpers.
 - `studio_voice/client.py`: Studio Voice gRPC client.
 - `studio_voice/audio_utils.py`: ComfyUI AUDIO conversion helpers.
-- `studio_voice/connection.py`: `StudioVoiceConnection` dataclass passed between setup and enhance nodes.
+- `studio_voice/connection.py`: `StudioVoiceConnection` and `StudioVoiceSetupSettings` dataclasses.
 - `studio_voice/interfaces/`: generated NVIDIA Studio Voice gRPC files vendored from `NVIDIA-Maxine/nim-clients`.
 - `docs/windows-docker-studio-voice.md`: Windows/Docker operational notes.
 
@@ -60,16 +69,43 @@ C:\Users\gerhh\Documents\IA\ProyectosDesarrolloAgentico\ComfyUI-NVIDIA-Maxine
 
 ## Nodes
 
+### NVIDIA Studio Voice Advanced Settings
+
+Purpose: optional technical override node for users who need full Docker/NIM
+control. This keeps the main setup node user-friendly.
+
+Output:
+
+- `STUDIO_VOICE_SETUP_SETTINGS`
+
+Inputs:
+
+- `image`
+- `container_name`
+- `model_profile`
+- `file_size_limit`
+- `force_pull`
+- `target`
+- `model_type`
+- `wait_timeout_s`
+- `ngc_username`
+
 ### NVIDIA Studio Voice Docker Setup
 
 Purpose: one user-friendly node that prepares and validates local Studio Voice
 NIM.
 
-Inputs and intended defaults:
+Visible inputs:
 
 ```text
 action:           setup_all_transactional
 ngc_api_key:      <user pastes NGC key>
+advanced_settings: optional STUDIO_VOICE_SETUP_SETTINGS connection
+```
+
+Internal defaults when `advanced_settings` is not connected:
+
+```text
 image:            nvcr.io/nim/nvidia/studio-voice:latest
 container_name:   studio-voice-nim
 model_profile:    <empty>
@@ -81,7 +117,7 @@ wait_timeout_s:   900
 ngc_username:     $oauthtoken
 ```
 
-`ngc_username` is advanced and must default to the literal `$oauthtoken`.
+`ngc_username` lives in the advanced settings node and must default to the literal `$oauthtoken`.
 NVIDIA Build deploy docs show:
 
 ```text
@@ -90,10 +126,10 @@ Username: $oauthtoken
 Password: <NGC API key>
 ```
 
-Important: Do not move fields in the schema casually. ComfyUI workflows can
-preserve widget values positionally. A previous insertion of `ngc_username`
-before `image` shifted values and corrupted existing workflows. Add new fields
-at the end unless there is a migration plan.
+Important: The setup node schema was simplified after the first working
+snapshot. Old workflows that have shifted or stale widgets should recreate the
+setup node and reconnect it. Future changes should prefer the Advanced Settings
+node instead of adding technical widgets back to the setup node.
 
 Actions:
 
@@ -129,7 +165,8 @@ Inputs:
 - Optional `studio_voice_connection`.
 - Advanced fallback fields: `target`, `model_type`, `streaming`, `timeout_s`.
 
-If `studio_voice_connection` is connected, it overrides `target/model_type/streaming`.
+If `studio_voice_connection` is connected, it is the source of truth for
+`target/model_type/streaming/timeout_s`.
 If the connection says `ready=False`, the node performs a live gRPC check before
 failing. This avoids stale false-negative connection objects when the service
 became ready after the setup node returned.
@@ -196,8 +233,9 @@ If pull returns access denied after login, likely causes are:
 ## Progress Logging
 
 `docker pull` can be long and Docker Desktop may not show partial image progress.
-The current implementation uses streaming subprocess output for pull and logs
-lines to ComfyUI logs with:
+The implementation first tries the Docker Engine API pull stream when the
+optional Python Docker SDK is available. If not, it falls back to parsing
+`docker pull` CLI output. Both paths log aggregate progress to ComfyUI logs with:
 
 ```text
 [NVIDIA Studio Voice Setup]
@@ -205,6 +243,13 @@ lines to ComfyUI logs with:
 
 If changing Docker code, preserve this behavior. The user specifically requested
 download progress in Comfy logs.
+
+Expected pull log shape:
+
+```text
+[NVIDIA Studio Voice Setup] Pull progress: 42.7% known bytes | 18/34 layers pulled | 29/34 downloaded | 12.4 GB / 29.1 GB known.
+[NVIDIA Studio Voice Setup] Pull still running: elapsed 12m 30s, 18/34 layers pulled, 29/34 downloaded.
+```
 
 ## Security / Secrets
 
@@ -259,7 +304,7 @@ C:\Users\gerhh\Documents\IA\ComfyDesktop\.venv\Scripts\python.exe -c "import asy
 Expected:
 
 ```text
-['NVIDIA Studio Voice Docker Setup', 'NVIDIA Studio Voice Enhance']
+['NVIDIA Studio Voice Advanced Settings', 'NVIDIA Studio Voice Docker Setup', 'NVIDIA Studio Voice Enhance']
 ```
 
 When copying to Comfy Desktop, only copy project files, not
@@ -289,4 +334,3 @@ Likely next steps:
 Do not add an artificial Studio Voice "intensity" parameter unless the user
 approves a dry/wet local mix. The public Studio Voice proto currently transports
 only audio bytes and does not expose a native effect-intensity field.
-
