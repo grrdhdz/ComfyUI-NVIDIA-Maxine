@@ -19,7 +19,7 @@ NVIDIA Studio Voice Docker Setup
         |
         | STUDIO_VOICE_CONNECTION
         v
-Load Audio -> NVIDIA Studio Voice Enhance -> Save Audio / Preview Audio
+Load Audio -> NVIDIA Studio Voice Prepare Audio -> NVIDIA Studio Voice Enhance -> Save Audio / Preview Audio
 ```
 
 Advanced overrides are intentionally separated:
@@ -28,7 +28,7 @@ Advanced overrides are intentionally separated:
 NVIDIA Studio Voice Advanced Settings -> NVIDIA Studio Voice Docker Setup
                                                 |
                                                 v
-Load Audio -----------------------> NVIDIA Studio Voice Enhance -> Save Audio
+Load Audio -> NVIDIA Studio Voice Prepare Audio -> NVIDIA Studio Voice Enhance -> Save Audio
 ```
 
 ## Current Implementation
@@ -179,6 +179,23 @@ Supported sample rates:
 
 Currently the node fails with a clear message when sample rate does not match.
 Do not silently resample unless the user explicitly asks for automatic resampling.
+
+### NVIDIA Studio Voice Prepare Audio
+
+Purpose: optional but recommended node between `Load Audio` and `Enhance`.
+It resamples arbitrary recorded audio to the sample rate required by the selected
+Studio Voice model.
+
+Inputs:
+
+- Required `audio`.
+- Optional `studio_voice_connection`.
+- Advanced fallback `model_type`.
+
+If `studio_voice_connection` is connected, it uses the connection model type.
+For `48k-hq` and `48k-ll`, target sample rate is `48000 Hz`. For `16k-hq`, target
+sample rate is `16000 Hz`. If the input already matches, it passes audio through
+unchanged. It outputs prepared `AUDIO` and a `status` string.
 
 ## Docker / NIM Behavior
 

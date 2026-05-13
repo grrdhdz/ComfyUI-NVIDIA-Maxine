@@ -82,6 +82,11 @@ STREAMING=false
 
 The ComfyUI node default also uses `streaming=false`.
 
+For typical recordings, place `NVIDIA Studio Voice Prepare Audio` between
+`Load Audio` and `NVIDIA Studio Voice Enhance`. It automatically resamples
+44100 Hz or other source rates to the sample rate required by the selected
+Studio Voice model.
+
 For low-latency experiments, both the container and the ComfyUI node must be
 configured for streaming:
 

@@ -9,7 +9,12 @@ except ImportError:  # pragma: no cover - direct unit-style imports outside Comf
     io = None
 
 try:
-    from .studio_voice.audio_utils import comfy_audio_to_numpy, expected_sample_rate, numpy_to_comfy_audio
+    from .studio_voice.audio_utils import (
+        comfy_audio_to_numpy,
+        expected_sample_rate,
+        numpy_to_comfy_audio,
+        resample_comfy_audio,
+    )
     from .studio_voice.client import MODEL_TYPES, check_channel, enhance_audio
     from .studio_voice.connection import StudioVoiceConnection, StudioVoiceSetupSettings
     from .studio_voice.docker_utils import (
@@ -28,7 +33,12 @@ try:
         start_transactional_container,
     )
 except ImportError:
-    from studio_voice.audio_utils import comfy_audio_to_numpy, expected_sample_rate, numpy_to_comfy_audio
+    from studio_voice.audio_utils import (
+        comfy_audio_to_numpy,
+        expected_sample_rate,
+        numpy_to_comfy_audio,
+        resample_comfy_audio,
+    )
     from studio_voice.client import MODEL_TYPES, check_channel, enhance_audio
     from studio_voice.connection import StudioVoiceConnection, StudioVoiceSetupSettings
     from studio_voice.docker_utils import (
@@ -241,6 +251,51 @@ class NvidiaStudioVoiceEnhance(io.ComfyNode):
         return io.NodeOutput(numpy_to_comfy_audio(result_np, result_rate))
 
 
+class NvidiaStudioVoicePrepareAudio(io.ComfyNode):
+    @classmethod
+    def define_schema(cls) -> io.Schema:
+        return io.Schema(
+            node_id="NvidiaStudioVoicePrepareAudio",
+            display_name="NVIDIA Studio Voice Prepare Audio",
+            category="NVIDIA Maxine/Audio",
+            description="Prepare recorded audio for Studio Voice by resampling it to the selected model sample rate.",
+            search_aliases=["studio voice resample", "studio voice prepare", "audio resample", "48k audio"],
+            inputs=[
+                io.Audio.Input("audio"),
+                StudioVoiceConnectionIO.Input("studio_voice_connection", optional=True),
+                io.Combo.Input("model_type", options=list(MODEL_TYPES), default=DEFAULT_MODEL_TYPE, advanced=True),
+            ],
+            outputs=[
+                io.Audio.Output("audio"),
+                io.String.Output("status"),
+            ],
+        )
+
+    @classmethod
+    def execute(
+        cls,
+        audio,
+        studio_voice_connection=None,
+        model_type=DEFAULT_MODEL_TYPE,
+    ) -> io.NodeOutput:
+        if studio_voice_connection is not None:
+            model_type = studio_voice_connection.model_type
+        if model_type not in MODEL_TYPES:
+            model_type = DEFAULT_MODEL_TYPE
+
+        target_sample_rate = expected_sample_rate(model_type)
+        prepared_audio, source_sample_rate, changed = resample_comfy_audio(audio, target_sample_rate)
+        if changed:
+            status = (
+                "Resampled audio for Studio Voice: "
+                f"{source_sample_rate} Hz -> {target_sample_rate} Hz "
+                f"for model_type {model_type}."
+            )
+        else:
+            status = f"Audio already matches Studio Voice model_type {model_type}: {target_sample_rate} Hz."
+        return io.NodeOutput(prepared_audio, status)
+
+
 class NvidiaStudioVoiceDockerSetup(io.ComfyNode):
     @classmethod
     def define_schema(cls) -> io.Schema:
@@ -365,6 +420,7 @@ class NvidiaMaxineExtension(ComfyExtension):
         return [
             NvidiaStudioVoiceAdvancedSettings,
             NvidiaStudioVoiceDockerSetup,
+            NvidiaStudioVoicePrepareAudio,
             NvidiaStudioVoiceEnhance,
         ]
 

@@ -5,6 +5,7 @@ from typing import Tuple
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 
 
 def expected_sample_rate(model_type: str) -> int:
@@ -49,6 +50,46 @@ def numpy_to_comfy_audio(audio_np: np.ndarray, sample_rate: int) -> dict:
     return {"waveform": waveform, "sample_rate": int(sample_rate)}
 
 
+def resample_comfy_audio(audio: dict, target_sample_rate: int) -> tuple[dict, int, bool]:
+    """Return a ComfyUI AUDIO dict resampled to target_sample_rate when needed."""
+    if not isinstance(audio, dict) or "waveform" not in audio or "sample_rate" not in audio:
+        raise ValueError("Expected ComfyUI AUDIO dict with waveform and sample_rate.")
+
+    waveform = audio["waveform"]
+    source_sample_rate = int(audio["sample_rate"])
+    target_sample_rate = int(target_sample_rate)
+    if not isinstance(waveform, torch.Tensor):
+        raise ValueError("AUDIO waveform must be a torch.Tensor.")
+    if source_sample_rate == target_sample_rate:
+        return audio, source_sample_rate, False
+    if source_sample_rate <= 0 or target_sample_rate <= 0:
+        raise ValueError(
+            f"Invalid sample rates for resampling: source={source_sample_rate}, target={target_sample_rate}."
+        )
+
+    wav = waveform.detach().float()
+    original_shape = wav.shape
+    if wav.ndim < 1:
+        raise ValueError(f"Unsupported AUDIO waveform shape: {tuple(original_shape)}")
+
+    try:
+        import torchaudio.functional as AF
+
+        resampled = AF.resample(wav.cpu(), source_sample_rate, target_sample_rate)
+    except Exception:
+        flat = wav.reshape(-1, wav.shape[-1]).cpu()
+        new_length = max(1, round(flat.shape[-1] * target_sample_rate / source_sample_rate))
+        resampled_flat = F.interpolate(
+            flat[:, None, :],
+            size=new_length,
+            mode="linear",
+            align_corners=False,
+        )[:, 0, :]
+        resampled = resampled_flat.reshape(*original_shape[:-1], new_length)
+
+    return {"waveform": resampled.contiguous(), "sample_rate": target_sample_rate}, source_sample_rate, True
+
+
 def encode_wav_bytes(audio_np: np.ndarray, sample_rate: int) -> bytes:
     import soundfile as sf
 
@@ -64,4 +105,3 @@ def decode_wav_bytes(data: bytes) -> Tuple[np.ndarray, int]:
         raise ValueError("Studio Voice returned an empty audio payload.")
     audio_np, sample_rate = sf.read(io.BytesIO(data), dtype="float32", always_2d=False)
     return audio_np, int(sample_rate)
-
