@@ -58,6 +58,8 @@ Main files:
 - `relighting/client.py`: local Relighting bidirectional gRPC client.
 - `relighting/connection.py`: `RelightingConnection` and `RelightingSetupSettings` dataclasses.
 - `relighting/interfaces/`: generated NVIDIA Relighting gRPC files vendored from `NVIDIA-Maxine/nim-clients`.
+- `requirements.txt`: Python dependencies expected to be installed into the same environment that runs ComfyUI.
+- `docs/installation.md`: clone/install instructions for other ComfyUI installations.
 - `docs/windows-docker-studio-voice.md`: Windows/Docker operational notes.
 
 The installed Comfy Desktop copy is expected at:
@@ -437,6 +439,9 @@ Important operational details:
 
 Relighting status as of 2026-05-13:
 
+- Relighting nodes are intentionally blocked in `nodes.py` for now. Do not
+  re-enable Docker setup or inference until Relighting has been validated on a
+  supported runtime.
 - Correct image is `nvcr.io/nim/nvidia/ai4m-relighting:1.1.0`; the older
   `nvcr.io/nim/nvidia/relighting:1.1.0` returns `Access Denied`.
 - The image pulls and the NIM reaches HTTP ready plus gRPC SERVING on this
@@ -450,10 +455,11 @@ Relighting status as of 2026-05-13:
   `S_EXT_CTRLS for CUDA_GPU_ID failed`. The Docker container itself can remain
   `running`, and HTTP `/v1/health/ready` can still report ready while host gRPC
   port `8101` no longer accepts calls.
-- `NVIDIA Relighting Docker Setup` now restarts a running Relighting container
-  when the container exists but host gRPC is not reachable. `NVIDIA Relighting
-  Apply` now converts raw `grpc.RpcError` failures into a diagnostic RuntimeError
-  with Docker state, ports, and recent container logs.
+- Previous diagnostics code can restart a running Relighting container when the
+  container exists but host gRPC is not reachable, and can convert raw
+  `grpc.RpcError` failures into a diagnostic RuntimeError. That path is
+  currently unreachable because the public Relighting nodes are blocked before
+  Docker or gRPC work begins.
 
 ## Known Environment Facts
 

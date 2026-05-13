@@ -4,6 +4,35 @@ Custom nodes for running NVIDIA Maxine NIMs from ComfyUI. The first stable
 workflow is Studio Voice for recorded-speech enhancement. The package also
 includes a parallel Relighting NIM workflow for local MP4 relighting.
 
+## Installation
+
+Clone this repository into ComfyUI's `custom_nodes` folder and install the
+Python dependencies with the same Python environment that runs ComfyUI:
+
+```powershell
+cd C:\path\to\ComfyUI\custom_nodes
+git clone https://github.com/grrdhdz/ComfyUI-NVIDIA-Maxine.git
+cd ComfyUI-NVIDIA-Maxine
+C:\path\to\ComfyUI\.venv\Scripts\python.exe -m pip install -r requirements.txt
+```
+
+For ComfyUI portable builds, replace the Python path with the portable embedded
+Python executable. For Comfy Desktop, use that installation's `.venv` Python.
+
+Restart ComfyUI after installing. The normal dependency file is
+`requirements.txt`; there is no `requirements.py`.
+
+Runtime requirements:
+
+- ComfyUI with the V3 custom node API. Development has been validated against
+  ComfyUI `0.21.0`.
+- Docker Desktop on Windows with the WSL2 engine enabled.
+- NVIDIA GPU access from Docker.
+- NGC Personal API key with access to the NVIDIA NIM image.
+
+More detailed setup notes are in `docs/installation.md` and
+`docs/windows-docker-studio-voice.md`.
+
 ## Studio Voice Workflow
 
 Simple mode uses ComfyUI's built-in audio nodes plus the Studio Voice setup
@@ -140,7 +169,19 @@ periodic heartbeats while Docker is still working.
 ## Relighting Workflow
 
 Relighting is implemented as a separate node family so it can coexist with
-Studio Voice without changing the audio workflow:
+Studio Voice without changing the audio workflow, but it is temporarily blocked
+in the node UI.
+
+Current status: disabled. In the tested Windows Docker Desktop environment the
+Relighting NIM starts, reports healthy, and accepts the request, but the video
+pipeline crashes during inference with `gRPC UNAVAILABLE / End of TCP stream`.
+The official NVIDIA `nim-clients` Relighting script reproduces the same failure,
+so this is treated as a NIM/runtime compatibility issue rather than a ComfyUI
+workflow bug.
+
+Studio Voice remains supported and unchanged.
+
+When Relighting is re-enabled, the intended flow is:
 
 ```text
 NVIDIA Relighting Docker Setup

@@ -112,6 +112,16 @@ StudioVoiceSetupSettingsIO = io.Custom("STUDIO_VOICE_SETUP_SETTINGS")
 RelightingConnectionIO = io.Custom("RELIGHTING_CONNECTION")
 RelightingSetupSettingsIO = io.Custom("RELIGHTING_SETUP_SETTINGS")
 
+RELIGHTING_BLOCKED_STATUS = (
+    "BLOCKED: NVIDIA Relighting nodes are temporarily disabled in this package.\n"
+    "Reason: in this Windows Docker Desktop environment the Relighting NIM starts and reports healthy, "
+    "but the video pipeline crashes during inference with gRPC UNAVAILABLE / End of TCP stream. "
+    "The official NVIDIA nim-clients Relighting script reproduces the same failure, and container logs "
+    "point to the NIM video runtime/NVENC/NVDEC path rather than this ComfyUI node code.\n\n"
+    "Studio Voice remains supported and unchanged. Relighting will be re-enabled only after it is "
+    "validated on a supported local runtime, likely native Linux or an NVIDIA-confirmed Docker/driver stack."
+)
+
 
 def _normalize_setup_settings(settings: StudioVoiceSetupSettings | None) -> StudioVoiceSetupSettings:
     if not isinstance(settings, StudioVoiceSetupSettings):
@@ -492,9 +502,12 @@ class NvidiaRelightingAdvancedSettings(io.ComfyNode):
     def define_schema(cls) -> io.Schema:
         return io.Schema(
             node_id="NvidiaRelightingAdvancedSettings",
-            display_name="NVIDIA Relighting Advanced Settings",
+            display_name="NVIDIA Relighting Advanced Settings (Blocked)",
             category="NVIDIA Maxine/Setup",
-            description="Optional technical Docker/NIM overrides for the Relighting Setup node.",
+            description=(
+                "Optional technical Docker/NIM overrides for Relighting. Relighting is currently blocked "
+                "because the local NIM video runtime fails during inference in the tested Windows Docker environment."
+            ),
             search_aliases=["relighting advanced", "nvidia relighting settings", "relighting docker settings"],
             inputs=[
                 io.String.Input("image", default=DEFAULT_RELIGHTING_IMAGE),
@@ -567,11 +580,11 @@ class NvidiaRelightingDockerSetup(io.ComfyNode):
     def define_schema(cls) -> io.Schema:
         return io.Schema(
             node_id="NvidiaRelightingDockerSetup",
-            display_name="NVIDIA Relighting Docker Setup",
+            display_name="NVIDIA Relighting Docker Setup (Blocked)",
             category="NVIDIA Maxine/Setup",
             description=(
-                "User-friendly Windows Docker setup for local NVIDIA Relighting NIM. "
-                "The NGC key is used in memory, but saved ComfyUI workflows may retain node input values."
+                "Temporarily blocked. The Relighting NIM starts locally, but its video pipeline currently fails "
+                "during inference in the tested Windows Docker Desktop environment."
             ),
             search_aliases=["relighting setup", "nvidia relighting nim", "relighting docker", "maxine relight"],
             inputs=[
@@ -609,6 +622,17 @@ class NvidiaRelightingDockerSetup(io.ComfyNode):
     def execute(cls, action, ngc_api_key, advanced_settings=None) -> io.NodeOutput:
         settings_source = "Advanced Settings node" if advanced_settings is not None else "safe defaults"
         settings = _normalize_relighting_settings(advanced_settings)
+
+        logging.warning("[NVIDIA Relighting Setup] Relighting is currently blocked; skipping Docker actions.")
+        connection = RelightingConnection(
+            target=settings.target,
+            ready=False,
+            container_name=settings.container_name,
+            timeout_s=settings.wait_timeout_s,
+            setup_error=RELIGHTING_BLOCKED_STATUS,
+        )
+        status = f"{RELIGHTING_BLOCKED_STATUS}\n\n{_relighting_settings_summary(settings, settings_source)}"
+        return io.NodeOutput(connection, status)
 
         if action == "check_docker":
             logging.info("[NVIDIA Relighting Setup] Checking Docker Desktop.")
@@ -669,9 +693,12 @@ class NvidiaRelightingApply(io.ComfyNode):
     def define_schema(cls) -> io.Schema:
         return io.Schema(
             node_id="NvidiaRelightingApply",
-            display_name="NVIDIA Relighting Apply",
+            display_name="NVIDIA Relighting Apply (Blocked)",
             category="NVIDIA Maxine/Video",
-            description="Apply NVIDIA Relighting to a local MP4 file through a locally hosted Relighting NIM.",
+            description=(
+                "Temporarily blocked. The local Relighting NIM video runtime fails during inference in the "
+                "tested Windows Docker Desktop environment."
+            ),
             search_aliases=["relighting apply", "nvidia relighting", "maxine relight video", "video relight"],
             inputs=[
                 io.String.Input("video_path", default="", tooltip="Local .mp4 path. The first version does not convert MOV/WebM/etc."),
@@ -733,6 +760,8 @@ class NvidiaRelightingApply(io.ComfyNode):
         lossless=False,
         timeout_s=3600.0,
     ) -> io.NodeOutput:
+        raise RuntimeError(RELIGHTING_BLOCKED_STATUS)
+
         target = DEFAULT_RELIGHTING_TARGET
         if relighting_connection is not None:
             target = relighting_connection.target
