@@ -653,6 +653,7 @@ class NvidiaRelightingDockerSetup(io.ComfyNode):
             ready=ready,
             container_name=settings.container_name,
             timeout_s=settings.wait_timeout_s,
+            setup_error="" if result.ok else result.output,
         )
         prefix = "OK" if result.ok else "ERROR"
         status = f"{prefix}: {result.output}{health_line}\n\n{_relighting_settings_summary(settings, settings_source)}"
@@ -732,6 +733,13 @@ class NvidiaRelightingApply(io.ComfyNode):
         if relighting_connection is not None:
             target = relighting_connection.target
             if not getattr(relighting_connection, "ready", False):
+                setup_error = str(getattr(relighting_connection, "setup_error", "") or "").strip()
+                if setup_error:
+                    raise RuntimeError(
+                        "Relighting setup did not complete, so Apply cannot run yet. "
+                        "Fix the Docker Setup node first. Setup details:\n"
+                        f"{setup_error}"
+                    )
                 live_error = check_relighting_channel(target=target, timeout_s=5.0)
                 if live_error is not None:
                     raise RuntimeError(

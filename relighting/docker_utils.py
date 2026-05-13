@@ -53,17 +53,24 @@ def pull_image(
     username: str = DEFAULT_NGC_USERNAME,
     progress: Optional[ProgressCallback] = None,
 ) -> CommandResult:
-    result = _pull_image(api_key, image=image, username=username, progress=progress)
+    result = _pull_image(
+        api_key,
+        image=image,
+        username=username,
+        progress=progress,
+        image_label="Relighting",
+        access_instructions=(
+            "The image name matches NVIDIA's Relighting NIM deployment documentation. "
+            "If pull access is denied, open "
+            "https://docs.nvidia.com/nim/maxine/relighting/latest/getting-started.html "
+            "while signed in, accept the Relighting NIM terms if prompted, then generate or reuse an "
+            "NGC Personal API key with the NGC Catalog service enabled. Your NGC account must also "
+            "have access to this downloadable NIM."
+        ),
+    )
     if result.ok:
         return CommandResult(True, f"Relighting image is ready: {image}")
-    return CommandResult(
-        False,
-        result.output
-        + "\n\n"
-        "For Relighting NIM access, open "
-        "https://docs.nvidia.com/nim/maxine/relighting/latest/getting-started.html "
-        "while signed in to NVIDIA/NGC and make sure the Relighting NIM terms are accepted.",
-    )
+    return result
 
 
 def container_status(container_name: str = DEFAULT_CONTAINER_NAME) -> str:

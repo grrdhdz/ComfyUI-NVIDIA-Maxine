@@ -9,6 +9,7 @@ class RelightingConnection:
     ready: bool = False
     container_name: str = "relighting-nim"
     timeout_s: float = 3600.0
+    setup_error: str = ""
 
 
 @dataclass(frozen=True)
@@ -23,4 +24,3 @@ class RelightingSetupSettings:
     metrics_host_port: int = 19002
     wait_timeout_s: float = 1200.0
     ngc_username: str = "$oauthtoken"
-

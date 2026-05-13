@@ -462,12 +462,14 @@ def pull_image(
     image: str = DEFAULT_IMAGE,
     username: str = DEFAULT_NGC_USERNAME,
     progress: Optional[ProgressCallback] = None,
+    image_label: str = "Studio Voice",
+    access_instructions: Optional[str] = None,
 ) -> CommandResult:
     _emit(progress, f"Logging into NGC as {username}.")
     login = ngc_login(api_key, username=username)
     if not login.ok:
         return CommandResult(False, "NGC Docker login failed:\n" + login.output)
-    _emit(progress, f"Pulling NIM image: {image}")
+    _emit(progress, f"Pulling {image_label} NIM image: {image}")
     key = _effective_key(api_key)
     pull = _pull_image_engine_api(key, image=image, username=username, progress=progress)
     if pull is None:
@@ -479,16 +481,16 @@ def pull_image(
             pull_progress=tracker,
         )
     if pull.ok:
-        return CommandResult(True, f"{login.output}\nNIM image is ready: {image}")
-    diagnostic = (
-        f"{login.output}\n"
-        f"Docker pull failed for {image}:\n{pull.output}\n\n"
-        "The image name matches NVIDIA's Studio Voice NIM deployment documentation. "
-        "If pull access is denied, open https://build.nvidia.com/nvidia/studiovoice/deploy "
-        "while signed in, accept the Terms of Use for this NIM, then generate or reuse an "
-        "NGC Personal API key with the NGC Catalog service enabled. Your NGC account must "
-        "also have access to this downloadable NIM."
-    )
+        return CommandResult(True, f"{login.output}\n{image_label} NIM image is ready: {image}")
+    if access_instructions is None:
+        access_instructions = (
+            "The image name matches NVIDIA's Studio Voice NIM deployment documentation. "
+            "If pull access is denied, open https://build.nvidia.com/nvidia/studiovoice/deploy "
+            "while signed in, accept the Terms of Use for this NIM, then generate or reuse an "
+            "NGC Personal API key with the NGC Catalog service enabled. Your NGC account must "
+            "also have access to this downloadable NIM."
+        )
+    diagnostic = f"{login.output}\nDocker pull failed for {image}:\n{pull.output}\n\n{access_instructions}"
     return CommandResult(False, diagnostic)
 
 
