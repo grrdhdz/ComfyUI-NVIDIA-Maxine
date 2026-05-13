@@ -51,6 +51,12 @@ def _format_elapsed(seconds: float) -> str:
     return f"{sec}s"
 
 
+def _friendly_grpc_wait_error(error: str) -> str:
+    if "FutureTimeoutError" in error:
+        return "gRPC endpoint is still warming up."
+    return error
+
+
 def _format_bytes(value: float) -> str:
     units = ("B", "KB", "MB", "GB", "TB")
     size = float(max(0.0, value))
@@ -660,7 +666,8 @@ def setup_all_transactional(
                 progress,
                 "Waiting for gRPC endpoint: "
                 f"elapsed {_format_elapsed(now - wait_start)}, "
-                f"remaining {_format_elapsed(remaining)}. Last error: {last_error}",
+                f"remaining {_format_elapsed(remaining)}. "
+                f"Status: {_friendly_grpc_wait_error(last_error)}",
             )
             last_wait_log = now
         time.sleep(5.0)
