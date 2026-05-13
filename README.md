@@ -28,6 +28,9 @@ The node calls a locally hosted Studio Voice NIM over gRPC at
 `127.0.0.1:8001` by default. It does not call NVIDIA's remote preview API and
 does not accept an API key inside ComfyUI.
 
+Studio Voice's optional HTTP port is mapped to host port `18000` instead of
+`8000`, because Comfy Desktop commonly uses host port `8000` for its own UI.
+
 ## Friendly Setup Node
 
 Use `NVIDIA Studio Voice Docker Setup` from ComfyUI to prepare the local NIM.
@@ -56,6 +59,9 @@ By default the setup is idempotent:
 - If the container is already running, it reuses it.
 - If the container exists but is stopped, it starts it.
 - If the image already exists, it does not pull again.
+- If an older `studio-voice-nim` container maps host port `8000`, setup
+  recreates it with NIM HTTP on host port `18000` to avoid blocking Comfy
+  Desktop.
 - Connect `NVIDIA Studio Voice Advanced Settings` only when you intentionally
   need to override technical Docker/NIM values such as `force_pull`, image,
   target, model type, or timeouts.

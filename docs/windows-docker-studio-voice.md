@@ -64,6 +64,10 @@ During a long image pull, the setup node logs aggregate progress in ComfyUI:
 known byte percentage, downloaded/pulled layer counts, and heartbeat messages
 while Docker is still working.
 
+The node maps Studio Voice gRPC to host port `8001` and maps the NIM HTTP port
+to host port `18000`. It intentionally does not use host port `8000`, because
+Comfy Desktop commonly uses `8000` for its own UI.
+
 The setup node does not write the key to disk, but saved ComfyUI workflows may
 retain input values. For maximum hygiene, set `NGC_API_KEY` before launching
 ComfyUI and leave the node's `ngc_api_key` field empty.
@@ -102,7 +106,7 @@ docker run -it --rm --name studio-voice-nim `
   -e NGC_API_KEY=$env:NGC_API_KEY `
   -e FILE_SIZE_LIMIT=36700160 `
   -e STREAMING=false `
-  -p 8000:8000 `
+  -p 18000:8000 `
   -p 8001:8001 `
   nvcr.io/nim/nvidia/studio-voice:latest
 ```

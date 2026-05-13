@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import json
 import queue
 import re
 import subprocess
@@ -20,6 +21,7 @@ DEFAULT_MODEL_TYPE = "48k-hq"
 DEFAULT_FILE_SIZE_LIMIT = 36700160
 DEFAULT_WAIT_TIMEOUT_S = 900.0
 DEFAULT_NGC_USERNAME = "$oauthtoken"
+DEFAULT_HTTP_HOST_PORT = 18000
 PULL_HEARTBEAT_S = 30.0
 PULL_SUMMARY_S = 5.0
 
@@ -499,6 +501,23 @@ def container_status(container_name: str = DEFAULT_CONTAINER_NAME) -> str:
     return result.output.strip()
 
 
+def container_has_legacy_comfy_port_mapping(container_name: str = DEFAULT_CONTAINER_NAME) -> bool:
+    result = _run(
+        ["docker", "inspect", "-f", "{{json .NetworkSettings.Ports}}", container_name],
+        timeout_s=30,
+    )
+    if not result.ok:
+        return False
+    try:
+        ports = json.loads(result.output)
+    except json.JSONDecodeError:
+        return False
+    http_bindings = ports.get("8000/tcp") if isinstance(ports, dict) else None
+    if not isinstance(http_bindings, list):
+        return False
+    return any(str(binding.get("HostPort")) == "8000" for binding in http_bindings if isinstance(binding, dict))
+
+
 def start_transactional_container(
     api_key: str,
     image: str = DEFAULT_IMAGE,
@@ -512,6 +531,17 @@ def start_transactional_container(
     key = _effective_key(api_key)
     _emit(progress, "Container phase: checking existing Studio Voice container.")
     status = container_status(container_name)
+    if status != "missing" and container_has_legacy_comfy_port_mapping(container_name):
+        _emit(
+            progress,
+            "Container phase: existing Studio Voice container uses host port 8000, "
+            "which conflicts with Comfy Desktop. Recreating it with HTTP on host port "
+            f"{DEFAULT_HTTP_HOST_PORT} and gRPC on host port 8001.",
+        )
+        removed = _run(["docker", "rm", "-f", container_name], timeout_s=120)
+        if not removed.ok:
+            return removed
+        status = "missing"
     if status == "running":
         _emit(progress, f"Container phase: {container_name} is already running.")
         return CommandResult(True, f"{container_name} is already running on gRPC port 8001.")
@@ -548,7 +578,7 @@ def start_transactional_container(
         "-e",
         "STREAMING=false",
         "-p",
-        "8000:8000",
+        f"{DEFAULT_HTTP_HOST_PORT}:8000",
         "-p",
         "8001:8001",
     ]
@@ -558,7 +588,10 @@ def start_transactional_container(
 
     result = _run(args, timeout_s=300)
     if result.ok:
-        return CommandResult(True, f"{container_name} is starting. Wait for NIM logs, then use Health Check.")
+        return CommandResult(
+            True,
+            f"{container_name} is starting. gRPC is on host port 8001; NIM HTTP is on host port {DEFAULT_HTTP_HOST_PORT}.",
+        )
     return result
 
 

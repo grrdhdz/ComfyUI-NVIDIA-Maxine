@@ -206,10 +206,16 @@ The container is launched in transactional/offline mode for recorded audio:
 ```text
 STREAMING=false
 FILE_SIZE_LIMIT=36700160
--p 8000:8000
+-p 18000:8000
 -p 8001:8001
 --gpus all
 ```
+
+Do not map the NIM HTTP port to host port `8000`. Comfy Desktop commonly uses
+host port `8000`, and a previous `8000:8000` mapping caused Desktop to remain on
+its startup screen while the browser could still reach a service. The setup code
+detects an old `studio-voice-nim` container with `8000:8000` and recreates it
+with NIM HTTP on host port `18000`.
 
 The Studio Voice image name from NVIDIA Build deploy docs is:
 
