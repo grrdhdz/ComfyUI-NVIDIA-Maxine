@@ -19,7 +19,7 @@ NVIDIA Studio Voice Docker Setup
         |
         | STUDIO_VOICE_CONNECTION
         v
-Load Audio -> NVIDIA Studio Voice Prepare Audio -> NVIDIA Studio Voice Enhance -> Save Audio / Preview Audio
+Load Audio -> NVIDIA Studio Voice Enhance -> Save Audio / Preview Audio
 ```
 
 Advanced overrides are intentionally separated:
@@ -28,7 +28,7 @@ Advanced overrides are intentionally separated:
 NVIDIA Studio Voice Advanced Settings -> NVIDIA Studio Voice Docker Setup
                                                 |
                                                 v
-Load Audio -> NVIDIA Studio Voice Prepare Audio -> NVIDIA Studio Voice Enhance -> Save Audio
+Load Audio -----------------------> NVIDIA Studio Voice Enhance -> Save Audio
 ```
 
 ## Current Implementation
@@ -86,7 +86,6 @@ Inputs:
 - `file_size_limit`
 - `force_pull`
 - `target`
-- `model_type`
 - `wait_timeout_s`
 - `ngc_username`
 
@@ -112,7 +111,7 @@ model_profile:    <empty>
 file_size_limit:  36700160
 force_pull:       false
 target:           127.0.0.1:8001
-model_type:       48k-hq
+model_type:       48k-hq (fixed internally)
 wait_timeout_s:   900
 ngc_username:     $oauthtoken
 ```
@@ -163,39 +162,23 @@ Inputs:
 
 - Required `audio`.
 - Optional `studio_voice_connection`.
-- Advanced fallback fields: `target`, `model_type`, `streaming`, `timeout_s`.
 
-If `studio_voice_connection` is connected, it is the source of truth for
-`target/model_type/streaming/timeout_s`.
+The simplified user-facing node exposes no model selection. It always uses
+`48k-hq`, automatically resamples incoming audio to `48000 Hz`, and calls the
+local NIM. If `studio_voice_connection` is connected, it is the source of truth
+for `target/streaming/timeout_s`.
 If the connection says `ready=False`, the node performs a live gRPC check before
 failing. This avoids stale false-negative connection objects when the service
 became ready after the setup node returned.
 
-Supported sample rates:
-
-- `48k-hq`: input must be 48000 Hz.
-- `48k-ll`: input must be 48000 Hz.
-- `16k-hq`: input must be 16000 Hz.
-
-Currently the node fails with a clear message when sample rate does not match.
-Do not silently resample unless the user explicitly asks for automatic resampling.
+The node accepts common source rates such as 44100 Hz and prepares them
+internally before inference.
 
 ### NVIDIA Studio Voice Prepare Audio
 
-Purpose: optional but recommended node between `Load Audio` and `Enhance`.
-It resamples arbitrary recorded audio to the sample rate required by the selected
-Studio Voice model.
-
-Inputs:
-
-- Required `audio`.
-- Optional `studio_voice_connection`.
-- Advanced fallback `model_type`.
-
-If `studio_voice_connection` is connected, it uses the connection model type.
-For `48k-hq` and `48k-ll`, target sample rate is `48000 Hz`. For `16k-hq`, target
-sample rate is `16000 Hz`. If the input already matches, it passes audio through
-unchanged. It outputs prepared `AUDIO` and a `status` string.
+This node was introduced briefly and then folded into `NVIDIA Studio Voice
+Enhance` to simplify the workflow. Do not register it in `get_node_list()` unless
+the user explicitly asks for a separate preparation/debug node again.
 
 ## Docker / NIM Behavior
 

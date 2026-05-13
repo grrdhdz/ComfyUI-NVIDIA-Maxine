@@ -82,21 +82,21 @@ STREAMING=false
 
 The ComfyUI node default also uses `streaming=false`.
 
-For typical recordings, place `NVIDIA Studio Voice Prepare Audio` between
-`Load Audio` and `NVIDIA Studio Voice Enhance`. It automatically resamples
-44100 Hz or other source rates to the sample rate required by the selected
-Studio Voice model.
+For typical recordings, connect `Load Audio` directly to
+`NVIDIA Studio Voice Enhance`. The enhance node uses `48k-hq` and automatically
+resamples 44100 Hz or other source rates to `48000 Hz`.
 
-For low-latency experiments, both the container and the ComfyUI node must be
-configured for streaming:
+Low-latency/streaming mode is intentionally not exposed in the simplified
+ComfyUI workflow:
 
 ```text
 STREAMING=true
 model_type=48k-ll
 ```
 
-Use NVIDIA's current Studio Voice NIM quick-start command for the exact image
-name and environment variables, then expose gRPC port `8001`.
+Use NVIDIA's current Studio Voice NIM quick-start command outside this package
+if you want to experiment with alternate profiles. The packaged ComfyUI flow is
+optimized for recorded-file enhancement with `48k-hq`.
 
 PowerShell template:
 

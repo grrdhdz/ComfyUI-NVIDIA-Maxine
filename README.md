@@ -12,7 +12,7 @@ connection:
 NVIDIA Studio Voice Docker Setup
     |
     v
-Load Audio -> NVIDIA Studio Voice Prepare Audio -> NVIDIA Studio Voice Enhance -> Save Audio
+Load Audio -> NVIDIA Studio Voice Enhance -> Save Audio
 ```
 
 Advanced mode adds one optional settings node before setup:
@@ -21,7 +21,7 @@ Advanced mode adds one optional settings node before setup:
 NVIDIA Studio Voice Advanced Settings -> NVIDIA Studio Voice Docker Setup
                                                 |
                                                 v
-Load Audio -> NVIDIA Studio Voice Prepare Audio -> NVIDIA Studio Voice Enhance -> Save Audio
+Load Audio -----------------------> NVIDIA Studio Voice Enhance -> Save Audio
 ```
 
 The node calls a locally hosted Studio Voice NIM over gRPC at
@@ -100,19 +100,13 @@ without access to this downloadable NIM.
 
 ## Controls
 
-Use `NVIDIA Studio Voice Prepare Audio` between `Load Audio` and `Enhance` for
-real-world recordings. It checks the selected Studio Voice model sample rate and
-resamples automatically when needed. For the default `48k-hq` model, it prepares
-audio at `48000 Hz`; for `16k-hq`, it prepares `16000 Hz`.
-
 The normal `Enhance` flow needs only `audio` and `studio_voice_connection`.
-When that connection is present, it is the source of truth for target, model
-type, and streaming mode.
+It always uses Studio Voice `48k-hq` and automatically resamples incoming audio
+to `48000 Hz` before calling the local NIM.
 
-Fallback advanced controls remain available for direct/manual use:
+Internal fallback values remain fixed for direct/manual use:
 
 - `target`: local gRPC target, usually `127.0.0.1:8001`.
-- `model_type`: `48k-hq`, `48k-ll`, or `16k-hq`.
 - `streaming`: off by default. Use `false` for recorded-file enhancement.
 - `timeout_s`: gRPC timeout.
 
@@ -122,11 +116,9 @@ or artificial intensity slider.
 
 ## Sample Rates
 
-- `48k-hq` and `48k-ll` require 48000 Hz input.
-- `16k-hq` requires 16000 Hz input.
-
-If your audio has another sample rate, insert `NVIDIA Studio Voice Prepare Audio`
-before the Studio Voice Enhance node.
+The package uses `48k-hq` by default and prepares audio at `48000 Hz`
+automatically. Common inputs such as 44100 Hz phone or messaging-app audio are
+resampled inside `NVIDIA Studio Voice Enhance`.
 
 ## Local NIM Requirement
 

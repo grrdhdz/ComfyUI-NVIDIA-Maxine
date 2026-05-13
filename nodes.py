@@ -15,7 +15,7 @@ try:
         numpy_to_comfy_audio,
         resample_comfy_audio,
     )
-    from .studio_voice.client import MODEL_TYPES, check_channel, enhance_audio
+    from .studio_voice.client import check_channel, enhance_audio
     from .studio_voice.connection import StudioVoiceConnection, StudioVoiceSetupSettings
     from .studio_voice.docker_utils import (
         DEFAULT_CONTAINER_NAME,
@@ -39,7 +39,7 @@ except ImportError:
         numpy_to_comfy_audio,
         resample_comfy_audio,
     )
-    from studio_voice.client import MODEL_TYPES, check_channel, enhance_audio
+    from studio_voice.client import check_channel, enhance_audio
     from studio_voice.connection import StudioVoiceConnection, StudioVoiceSetupSettings
     from studio_voice.docker_utils import (
         DEFAULT_CONTAINER_NAME,
@@ -66,7 +66,6 @@ def _normalize_setup_settings(settings: StudioVoiceSetupSettings | None) -> Stud
     if not isinstance(settings, StudioVoiceSetupSettings):
         settings = StudioVoiceSetupSettings()
 
-    model_type = settings.model_type if settings.model_type in MODEL_TYPES else DEFAULT_MODEL_TYPE
     try:
         file_size_limit = int(settings.file_size_limit)
     except (TypeError, ValueError):
@@ -91,7 +90,7 @@ def _normalize_setup_settings(settings: StudioVoiceSetupSettings | None) -> Stud
         file_size_limit=file_size_limit,
         force_pull=bool(settings.force_pull),
         target=(settings.target or DEFAULT_TARGET).strip() or DEFAULT_TARGET,
-        model_type=model_type,
+        model_type=DEFAULT_MODEL_TYPE,
         wait_timeout_s=wait_timeout_s,
         ngc_username=ngc_username,
     )
@@ -143,7 +142,6 @@ class NvidiaStudioVoiceAdvancedSettings(io.ComfyNode):
                     tooltip="When false, existing images/containers are reused. Enable only to refresh the NIM image.",
                 ),
                 io.String.Input("target", default=DEFAULT_TARGET),
-                io.Combo.Input("model_type", options=list(MODEL_TYPES), default=DEFAULT_MODEL_TYPE),
                 io.Float.Input("wait_timeout_s", default=DEFAULT_WAIT_TIMEOUT_S, min=30.0, max=7200.0, step=30.0),
                 io.String.Input(
                     "ngc_username",
@@ -165,7 +163,6 @@ class NvidiaStudioVoiceAdvancedSettings(io.ComfyNode):
         file_size_limit,
         force_pull,
         target,
-        model_type,
         wait_timeout_s,
         ngc_username,
     ) -> io.NodeOutput:
@@ -177,7 +174,7 @@ class NvidiaStudioVoiceAdvancedSettings(io.ComfyNode):
                 file_size_limit=file_size_limit,
                 force_pull=force_pull,
                 target=target,
-                model_type=model_type,
+                model_type=DEFAULT_MODEL_TYPE,
                 wait_timeout_s=wait_timeout_s,
                 ngc_username=ngc_username,
             )
@@ -197,14 +194,11 @@ class NvidiaStudioVoiceEnhance(io.ComfyNode):
             inputs=[
                 io.Audio.Input("audio"),
                 StudioVoiceConnectionIO.Input("studio_voice_connection", optional=True),
-                io.String.Input("target", default=DEFAULT_TARGET, advanced=True),
-                io.Combo.Input("model_type", options=list(MODEL_TYPES), default=DEFAULT_MODEL_TYPE, advanced=True),
-                io.Boolean.Input("streaming", default=False, advanced=True),
-                io.Float.Input("timeout_s", default=120.0, min=1.0, max=3600.0, step=1.0, advanced=True),
             ],
             outputs=[
                 io.Audio.Output("enhanced_audio"),
             ],
+            accept_all_inputs=True,
         )
 
     @classmethod
@@ -212,14 +206,14 @@ class NvidiaStudioVoiceEnhance(io.ComfyNode):
         cls,
         audio,
         studio_voice_connection=None,
-        target=DEFAULT_TARGET,
-        model_type=DEFAULT_MODEL_TYPE,
-        streaming=False,
-        timeout_s=120.0,
+        **kwargs,
     ) -> io.NodeOutput:
+        target = kwargs.get("target", DEFAULT_TARGET)
+        streaming = bool(kwargs.get("streaming", False))
+        timeout_s = float(kwargs.get("timeout_s", 120.0))
+        model_type = DEFAULT_MODEL_TYPE
         if studio_voice_connection is not None:
             target = studio_voice_connection.target
-            model_type = studio_voice_connection.model_type
             streaming = studio_voice_connection.streaming
             timeout_s = getattr(studio_voice_connection, "timeout_s", timeout_s)
             if not getattr(studio_voice_connection, "ready", False):
@@ -232,13 +226,16 @@ class NvidiaStudioVoiceEnhance(io.ComfyNode):
                         f"status output. Docker/NIM details: {live_error}"
                     )
 
-        audio_np, sample_rate = comfy_audio_to_numpy(audio)
         required_rate = expected_sample_rate(model_type)
-        if sample_rate != required_rate:
-            raise ValueError(
-                f"Studio Voice model_type {model_type} requires {required_rate} Hz input, "
-                f"but received {sample_rate} Hz. Resample before this node."
+        prepared_audio, source_sample_rate, changed = resample_comfy_audio(audio, required_rate)
+        if changed:
+            logging.info(
+                "[NVIDIA Studio Voice Enhance] Resampled audio automatically: %s Hz -> %s Hz for %s.",
+                source_sample_rate,
+                required_rate,
+                model_type,
             )
+        audio_np, sample_rate = comfy_audio_to_numpy(prepared_audio)
 
         result_np, result_rate, _elapsed = enhance_audio(
             audio_np=audio_np,
@@ -249,51 +246,6 @@ class NvidiaStudioVoiceEnhance(io.ComfyNode):
             timeout_s=float(timeout_s),
         )
         return io.NodeOutput(numpy_to_comfy_audio(result_np, result_rate))
-
-
-class NvidiaStudioVoicePrepareAudio(io.ComfyNode):
-    @classmethod
-    def define_schema(cls) -> io.Schema:
-        return io.Schema(
-            node_id="NvidiaStudioVoicePrepareAudio",
-            display_name="NVIDIA Studio Voice Prepare Audio",
-            category="NVIDIA Maxine/Audio",
-            description="Prepare recorded audio for Studio Voice by resampling it to the selected model sample rate.",
-            search_aliases=["studio voice resample", "studio voice prepare", "audio resample", "48k audio"],
-            inputs=[
-                io.Audio.Input("audio"),
-                StudioVoiceConnectionIO.Input("studio_voice_connection", optional=True),
-                io.Combo.Input("model_type", options=list(MODEL_TYPES), default=DEFAULT_MODEL_TYPE, advanced=True),
-            ],
-            outputs=[
-                io.Audio.Output("audio"),
-                io.String.Output("status"),
-            ],
-        )
-
-    @classmethod
-    def execute(
-        cls,
-        audio,
-        studio_voice_connection=None,
-        model_type=DEFAULT_MODEL_TYPE,
-    ) -> io.NodeOutput:
-        if studio_voice_connection is not None:
-            model_type = studio_voice_connection.model_type
-        if model_type not in MODEL_TYPES:
-            model_type = DEFAULT_MODEL_TYPE
-
-        target_sample_rate = expected_sample_rate(model_type)
-        prepared_audio, source_sample_rate, changed = resample_comfy_audio(audio, target_sample_rate)
-        if changed:
-            status = (
-                "Resampled audio for Studio Voice: "
-                f"{source_sample_rate} Hz -> {target_sample_rate} Hz "
-                f"for model_type {model_type}."
-            )
-        else:
-            status = f"Audio already matches Studio Voice model_type {model_type}: {target_sample_rate} Hz."
-        return io.NodeOutput(prepared_audio, status)
 
 
 class NvidiaStudioVoiceDockerSetup(io.ComfyNode):
@@ -420,7 +372,6 @@ class NvidiaMaxineExtension(ComfyExtension):
         return [
             NvidiaStudioVoiceAdvancedSettings,
             NvidiaStudioVoiceDockerSetup,
-            NvidiaStudioVoicePrepareAudio,
             NvidiaStudioVoiceEnhance,
         ]
 
