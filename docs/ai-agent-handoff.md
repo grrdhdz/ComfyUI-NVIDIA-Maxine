@@ -2,18 +2,17 @@
 
 ## Project Summary
 
-This repository implements ComfyUI custom nodes for NVIDIA Maxine NIMs. The
-first stable scope is Studio Voice, used as an offline recorded-speech enhancer
-similar in purpose to Adobe Podcast Enhance Speech. A parallel Relighting NIM
-workflow has been added for local MP4 video relighting.
+This repository implements ComfyUI custom nodes for NVIDIA Studio Voice NIM.
+The supported workflow is recorded-speech enhancement, similar in purpose to
+Adobe Podcast Enhance Speech, running locally through Docker Desktop.
 
-Primary user goal:
+Primary user goals:
 
 - Run locally on Windows + Docker Desktop.
 - Do not use NVIDIA remote inference APIs.
-- Let ComfyUI nodes handle Docker login, image pull, container startup, and
-  Studio Voice gRPC connection.
-- Keep the user workflow simple:
+- Let ComfyUI nodes handle Docker login, image pull, container startup, health
+  checks, and Studio Voice gRPC connection.
+- Keep the normal workflow simple:
 
 ```text
 NVIDIA Studio Voice Docker Setup
@@ -51,28 +50,16 @@ Main files:
 - `nodes.py`: V3 node definitions and entrypoint.
 - `studio_voice/docker_utils.py`: Docker Desktop / NGC / NIM lifecycle helpers.
 - `studio_voice/client.py`: Studio Voice gRPC client.
-- `studio_voice/audio_utils.py`: ComfyUI AUDIO conversion helpers.
-- `studio_voice/connection.py`: `StudioVoiceConnection` and `StudioVoiceSetupSettings` dataclasses.
-- `studio_voice/interfaces/`: generated NVIDIA Studio Voice gRPC files vendored from `NVIDIA-Maxine/nim-clients`.
-- `relighting/docker_utils.py`: Relighting Docker Desktop / NGC / NIM lifecycle helpers.
-- `relighting/client.py`: local Relighting bidirectional gRPC client.
-- `relighting/connection.py`: `RelightingConnection` and `RelightingSetupSettings` dataclasses.
-- `relighting/interfaces/`: generated NVIDIA Relighting gRPC files vendored from `NVIDIA-Maxine/nim-clients`.
-- `requirements.txt`: Python dependencies expected to be installed into the same environment that runs ComfyUI.
-- `docs/installation.md`: clone/install instructions for other ComfyUI installations.
+- `studio_voice/audio_utils.py`: ComfyUI AUDIO conversion and resampling helpers.
+- `studio_voice/connection.py`: `StudioVoiceConnection` and
+  `StudioVoiceSetupSettings` dataclasses.
+- `studio_voice/interfaces/`: generated NVIDIA Studio Voice gRPC files vendored
+  from `NVIDIA-Maxine/nim-clients`.
+- `requirements.txt`: Python dependencies expected to be installed into the same
+  environment that runs ComfyUI.
+- `docs/installation.md`: clone/install instructions for other ComfyUI
+  installations.
 - `docs/windows-docker-studio-voice.md`: Windows/Docker operational notes.
-
-The installed Comfy Desktop copy is expected at:
-
-```text
-C:\Users\gerhh\Documents\IA\ComfyDesktop\custom_nodes\ComfyUI-NVIDIA-Maxine
-```
-
-The development repo is:
-
-```text
-C:\Users\gerhh\Documents\IA\ProyectosDesarrolloAgentico\ComfyUI-NVIDIA-Maxine
-```
 
 ## Nodes
 
@@ -96,455 +83,118 @@ Inputs:
 - `wait_timeout_s`
 - `ngc_username`
 
-### NVIDIA Studio Voice Docker Setup
-
-Purpose: one user-friendly node that prepares and validates local Studio Voice
-NIM.
-
-Visible inputs:
-
-```text
-action:           setup_all_transactional
-ngc_api_key:      <user pastes NGC key>
-advanced_settings: optional STUDIO_VOICE_SETUP_SETTINGS connection
-```
-
-Internal defaults when `advanced_settings` is not connected:
+Important defaults:
 
 ```text
 image:            nvcr.io/nim/nvidia/studio-voice:latest
 container_name:   studio-voice-nim
-model_profile:    <empty>
+model_profile:    <auto>
 file_size_limit:  36700160
 force_pull:       false
 target:           127.0.0.1:8001
-model_type:       48k-hq (fixed internally)
+model_type:       48k-hq
 wait_timeout_s:   900
 ngc_username:     $oauthtoken
 ```
 
-`ngc_username` lives in the advanced settings node and must default to the literal `$oauthtoken`.
-NVIDIA Build deploy docs show:
+### NVIDIA Studio Voice Docker Setup
+
+Purpose: user-friendly node that prepares and validates local Studio Voice NIM.
+
+Visible inputs:
 
 ```text
-docker login nvcr.io
-Username: $oauthtoken
-Password: <NGC API key>
+action
+ngc_api_key
+advanced_settings: optional STUDIO_VOICE_SETUP_SETTINGS connection
 ```
-
-Important: The setup node schema was simplified after the first working
-snapshot. Old workflows that have shifted or stale widgets should recreate the
-setup node and reconnect it. Future changes should prefer the Advanced Settings
-node instead of adding technical widgets back to the setup node.
 
 Actions:
 
-- `setup_all_transactional`: full setup flow.
-- `check_docker`: `docker info`.
-- `check_gpu`: validates `--gpus=all` using NVIDIA CUDA sample.
-- `ngc_login`: Docker login to `nvcr.io`.
-- `pull_studio_voice`: pull Studio Voice NIM image.
-- `start_studio_voice_transactional`: start/reuse local transactional container.
+- `setup_all_transactional`: normal path; checks Docker/GPU, logs into NGC,
+  pulls/reuses image, starts/reuses container, waits for gRPC.
+- `check_docker`
+- `check_gpu`
+- `ngc_login`
+- `pull_studio_voice`
+- `start_studio_voice_transactional`
 
 Outputs:
 
 - `STUDIO_VOICE_CONNECTION`
-- `status` string
+- `status`
 
-The setup node integrates health checking. There is no separate health-check
-node in the primary V3 registration.
+Docker behavior:
 
-Idempotency:
-
-- If `studio-voice-nim` is running, reuse it.
-- If the container exists but is stopped, `docker start` it.
-- If the image exists and `force_pull=false`, do not pull again.
-- If the image is absent or `force_pull=true`, login and pull.
+- Reuses an existing running `studio-voice-nim`.
+- Starts it if it exists but is stopped.
+- Recreates it if it uses old/conflicting host ports.
+- Maps NIM HTTP to host `18000` to avoid Comfy Desktop's common `8000`.
+- Maps gRPC to host `8001`.
 
 ### NVIDIA Studio Voice Enhance
 
 Purpose: process recorded ComfyUI `AUDIO` through local Studio Voice NIM.
 
-Inputs:
+Visible inputs:
 
-- Required `audio`.
-- Optional `studio_voice_connection`.
-
-The simplified user-facing node exposes no model selection. It always uses
-`48k-hq`, automatically resamples incoming audio to `48000 Hz`, and calls the
-local NIM. If `studio_voice_connection` is connected, it is the source of truth
-for `target/streaming/timeout_s`.
-If the connection says `ready=False`, the node performs a live gRPC check before
-failing. This avoids stale false-negative connection objects when the service
-became ready after the setup node returned.
-
-The node accepts common source rates such as 44100 Hz and prepares them
-internally before inference.
-
-### NVIDIA Studio Voice Prepare Audio
-
-This node was introduced briefly and then folded into `NVIDIA Studio Voice
-Enhance` to simplify the workflow. Do not register it in `get_node_list()` unless
-the user explicitly asks for a separate preparation/debug node again.
-
-### NVIDIA Relighting Advanced Settings
-
-Purpose: optional technical override node for Relighting Docker/NIM setup.
+- `audio`
+- `studio_voice_connection`
 
 Output:
 
-- `RELIGHTING_SETUP_SETTINGS`
+- `enhanced_audio`
 
-Inputs:
+The node always uses `48k-hq` internally and automatically resamples source
+audio to `48000 Hz` before calling Studio Voice. Do not add a visible model type
+selector unless the user explicitly asks for it.
 
-- `image`
-- `container_name`
-- `manifest_profile`
-- `force_pull`
-- `target`
-- `grpc_host_port`
-- `http_host_port`
-- `metrics_host_port`
-- `wait_timeout_s`
-- `ngc_username`
-
-Defaults:
-
-```text
-image:             nvcr.io/nim/nvidia/ai4m-relighting:1.1.0
-container_name:    relighting-nim
-manifest_profile:  <empty>
-force_pull:        false
-target:            127.0.0.1:8101
-grpc_host_port:    8101
-http_host_port:    18100
-metrics_host_port: 19002
-wait_timeout_s:    1200
-ngc_username:      $oauthtoken
-```
-
-### NVIDIA Relighting Docker Setup
-
-Purpose: one user-friendly node that prepares and validates local Relighting
-NIM without changing Studio Voice nodes.
-
-Inputs:
-
-```text
-action:             setup_all
-ngc_api_key:        <user pastes NGC key>
-advanced_settings:  optional RELIGHTING_SETUP_SETTINGS connection
-```
-
-Actions:
-
-- `setup_all`: full setup flow.
-- `check_docker`: `docker info`.
-- `check_gpu`: validates `--gpus=all` using NVIDIA CUDA sample.
-- `ngc_login`: Docker login to `nvcr.io`.
-- `pull_relighting`: pull Relighting NIM image.
-- `start_relighting`: start/reuse local container.
-
-Outputs:
-
-- `RELIGHTING_CONNECTION`
-- `status` string
-
-Docker ports intentionally avoid Comfy Desktop and Studio Voice defaults:
-
-```text
-HTTP:    18100:8000
-gRPC:    8101:8001
-metrics: 19002:9002
-```
-
-Setup detects an existing `relighting-nim` with wrong or old port mappings and
-recreates it. If the image/container already matches and `force_pull=false`, it
-reuses them.
-
-### NVIDIA Relighting Apply
-
-Purpose: process a local MP4 through the local Relighting NIM over gRPC.
-
-Inputs:
-
-- `video_path`
-- `relighting_connection`
-- `hdri_preset`
-- `foreground_gain`
-- `background_gain`
-- `blur`
-- `specular`
-- `output_path`
-- `pan`
-- `vertical_fov`
-- `autorotate`
-- `rotation_rate`
-- `background_source`
-- `background_image_path`
-- `background_color`
-- `bitrate`
-- `idr_interval`
-- `lossless`
-- `timeout_s`
-
-Outputs:
-
-- `output_video_path`
-- `status`
-
-The node validates that `video_path` exists and has `.mp4` extension. It does
-not convert formats in v1. If `output_path` is empty, it writes to ComfyUI's
-output directory as `<input_stem>_relighting.mp4`.
-
-The client uses the official Relighting service shape:
-
-```text
-VideoRelightingService.Relight
-config -> optional image chunks -> MP4 chunks
-server progress/video bytes -> local output MP4
-```
-
-Vendored Relighting stubs are copied from
-`nim-clients-upstream/relighting/interfaces`; do not vendor the whole upstream
-repo into the package.
-
-## Docker / NIM Behavior
+## Docker Communication
 
 The ComfyUI node communicates with Docker through `docker.exe` using Python
-subprocess calls.
+`subprocess`. Docker Desktop can use WSL2 internally, but users should not need
+to open WSL or run Linux shell commands.
 
-Architecture:
-
-```text
-ComfyUI node
-  -> Python subprocess
-  -> docker.exe
-  -> Docker Desktop Linux engine
-  -> Studio Voice NIM container
-  -> local gRPC 127.0.0.1:8001
-  -> NVIDIA Studio Voice Enhance node
-```
-
-Relighting follows the same Windows Docker pattern:
+Studio Voice setup flow:
 
 ```text
 ComfyUI node
-  -> Python subprocess
-  -> docker.exe
-  -> Docker Desktop Linux engine
-  -> Relighting NIM container
-  -> local gRPC 127.0.0.1:8101
-  -> NVIDIA Relighting Apply node
+  -> docker info
+  -> docker run --rm --gpus=all nvcr.io/nvidia/k8s/cuda-sample:nbody ...
+  -> docker login nvcr.io --username $oauthtoken --password-stdin
+  -> docker pull nvcr.io/nim/nvidia/studio-voice:latest
+  -> docker create/start studio-voice-nim
+  -> gRPC health/readiness check at 127.0.0.1:8001
 ```
 
-The user wants Windows + Docker Desktop operation. They do not want to work in
-an Ubuntu/WSL shell. Docker Desktop may still use its internal WSL2 backend for
-GPU support; this is acceptable.
+During long pulls, logs are emitted to ComfyUI with aggregate progress and
+heartbeat messages. The implementation uses Docker CLI output parsing, not the
+Python Docker SDK.
 
-The container is launched in transactional/offline mode for recorded audio:
+## Security Notes
 
-```text
-STREAMING=false
-FILE_SIZE_LIMIT=36700160
--p 18000:8000
--p 8001:8001
---gpus all
-```
-
-Do not map the NIM HTTP port to host port `8000`. Comfy Desktop commonly uses
-host port `8000`, and a previous `8000:8000` mapping caused Desktop to remain on
-its startup screen while the browser could still reach a service. The setup code
-detects an old `studio-voice-nim` container with `8000:8000` and recreates it
-with NIM HTTP on host port `18000`.
-
-The Studio Voice image name from NVIDIA Build deploy docs is:
-
-```text
-nvcr.io/nim/nvidia/studio-voice:latest
-```
-
-Before first pull, the user must sign in and accept terms:
-
-```text
-https://build.nvidia.com/nvidia/studiovoice/deploy
-```
-
-If pull returns access denied after login, likely causes are:
-
-- Studio Voice NIM terms not accepted.
-- NGC API key missing `NGC Catalog` service.
-- NGC account lacks access to this NIM.
-- API key was pasted incorrectly.
-
-## Progress Logging
-
-`docker pull` can be long and Docker Desktop may not show partial image progress.
-The implementation first tries the Docker Engine API pull stream when the
-optional Python Docker SDK is available. If not, it falls back to parsing
-`docker pull` CLI output. Both paths log aggregate progress to ComfyUI logs with:
-
-```text
-[NVIDIA Studio Voice Setup]
-```
-
-If changing Docker code, preserve this behavior. The user specifically requested
-download progress in Comfy logs.
-
-Expected pull log shape:
-
-```text
-[NVIDIA Studio Voice Setup] Pull progress: 42.7% known bytes | 18/34 layers pulled | 29/34 downloaded | 12.4 GB / 29.1 GB known.
-[NVIDIA Studio Voice Setup] Pull still running: elapsed 12m 30s, 18/34 layers pulled, 29/34 downloaded.
-```
-
-## Security / Secrets
-
-The NGC API key is accepted in the setup node and passed to `docker login` via
-stdin.
-
-Rules:
-
-- Do not print the API key.
-- Do not write the API key to files.
-- Do not include the API key in commits.
+- NGC API keys are used in memory for `docker login` and NIM startup.
 - Warn that saved ComfyUI workflows may retain widget values.
 - Prefer leaving `ngc_api_key` empty and launching ComfyUI with `NGC_API_KEY` if
-  the user wants better hygiene.
+  the user wants to avoid saving keys in workflow JSON.
+- Do not echo full API keys in logs, docs, or responses.
 
-The container currently receives `NGC_API_KEY` as an environment variable during
-`docker run`, because NIM startup may need it to fetch/cache resources.
+## Validation
 
-## Latest Verified State
+Useful checks:
 
-As of 2026-05-13, the user confirmed the Studio Voice flow works after the
-Comfy Desktop port-conflict fix and after folding audio resampling directly into
-`NVIDIA Studio Voice Enhance`.
+```powershell
+python -m py_compile nodes.py studio_voice\audio_utils.py studio_voice\client.py studio_voice\docker_utils.py
+```
 
-Important operational details:
-
-- `studio-voice-nim` must not publish host port `8000`.
-- Expected ports are `18000:8000` for NIM HTTP and `8001:8001` for Studio Voice
-  gRPC.
-- Docker Desktop may show only `18000:8000` until "Show all ports" is expanded;
-  confirm with `docker ps` if needed.
-- During startup, `FutureTimeoutError` from `check_channel()` means the gRPC
-  endpoint is still warming up. The user-facing setup log should phrase this as
-  `gRPC endpoint is still warming up.`
-- The current simplified workflow is `Load Audio -> NVIDIA Studio Voice Enhance`.
-  `Enhance` uses `48k-hq` internally and resamples source audio to `48000 Hz`
-  automatically.
-- Do not re-register `NVIDIA Studio Voice Prepare Audio` unless the user asks for
-  a separate debugging/preprocessing node again.
-
-Relighting status as of 2026-05-13:
-
-- Relighting nodes are intentionally blocked in `nodes.py` for now. Do not
-  re-enable Docker setup or inference until Relighting has been validated on a
-  supported runtime.
-- Correct image is `nvcr.io/nim/nvidia/ai4m-relighting:1.1.0`; the older
-  `nvcr.io/nim/nvidia/relighting:1.1.0` returns `Access Denied`.
-- The image pulls and the NIM reaches HTTP ready plus gRPC SERVING on this
-  Windows Docker Desktop system.
-- Actual inference currently fails with `StatusCode.UNAVAILABLE: End of TCP
-  stream`. The official NVIDIA `nim-clients` Relighting client reproduces the
-  same failure against the same container and test MP4, so this is not isolated
-  to this ComfyUI client.
-- Container logs show the Relighting gRPC worker dies and becomes defunct after
-  the video pipeline reaches `decoder→transform→encoder`, with repeated
-  `S_EXT_CTRLS for CUDA_GPU_ID failed`. The Docker container itself can remain
-  `running`, and HTTP `/v1/health/ready` can still report ready while host gRPC
-  port `8101` no longer accepts calls.
-- Previous diagnostics code can restart a running Relighting container when the
-  container exists but host gRPC is not reachable, and can convert raw
-  `grpc.RpcError` failures into a diagnostic RuntimeError. That path is
-  currently unreachable because the public Relighting nodes are blocked before
-  Docker or gRPC work begins.
-
-## Known Environment Facts
-
-Observed machine:
-
-- Windows.
-- Docker Desktop 29.4.0 Linux engine.
-- Docker Desktop WSL2 backend enabled.
-- NVIDIA GeForce RTX 5060 Ti, 16 GB VRAM.
-- Docker `--gpus=all` was validated with `nvcr.io/nvidia/k8s/cuda-sample:nbody`.
-
-Important caveat:
-
-NVIDIA's Studio Voice support matrix has broad RTX Blackwell/Ada/Ampere/Turing
-language but historically explicit rows may not list RTX 5060 Ti. If NIM logs
-show profile selection errors such as `NIMProfileIDNotFound`, the Comfy nodes
-may be correct while the NIM profile/GPU combo is unsupported or requires a
-specific `NIM_MODEL_PROFILE`.
-
-## Development Workflow
-
-When editing:
-
-1. Modify files in this repo.
-2. Validate V3 entrypoint with Comfy Desktop Python and Comfy core on path.
-3. Copy changed files to Comfy Desktop custom_nodes.
-4. Restart ComfyUI to test actual UI registration.
-
-Useful validation command pattern:
+Comfy Desktop registration check:
 
 ```powershell
 C:\Users\gerhh\Documents\IA\ComfyDesktop\.venv\Scripts\python.exe -c "import asyncio, sys; sys.path.insert(0, r'C:\Users\gerhh\AppData\Local\Programs\ComfyUI\resources\ComfyUI'); sys.path.insert(0, r'C:\Users\gerhh\Documents\IA\ProyectosDesarrolloAgentico\ComfyUI-NVIDIA-Maxine'); import nodes; ext=asyncio.run(nodes.comfy_entrypoint()); lst=asyncio.run(ext.get_node_list()); print([n.GET_SCHEMA().display_name for n in lst])"
 ```
 
-Expected:
+Expected nodes:
 
 ```text
-['NVIDIA Studio Voice Advanced Settings', 'NVIDIA Studio Voice Docker Setup', 'NVIDIA Studio Voice Enhance', 'NVIDIA Relighting Advanced Settings', 'NVIDIA Relighting Docker Setup', 'NVIDIA Relighting Apply']
+['NVIDIA Studio Voice Advanced Settings', 'NVIDIA Studio Voice Docker Setup', 'NVIDIA Studio Voice Enhance']
 ```
-
-When copying to Comfy Desktop, only copy project files, not
-`nim-clients-upstream/`.
-
-## Git State
-
-Initial snapshot:
-
-```text
-commit: 40bd2cb feat: add ComfyUI Studio Voice NIM nodes
-tag:    snapshot-2026-05-13-studio-voice-nim-v1
-```
-
-Latest confirmed snapshot:
-
-```text
-commit: d23b7c0 chore: clarify studio voice grpc warmup logs
-tag:    snapshot-2026-05-13-studio-voice-desktop-port-fix-v1
-```
-
-Latest simplified UX snapshot:
-
-```text
-commit: 92aa3ab feat: fold audio resampling into studio voice enhance
-tag:    snapshot-2026-05-13-studio-voice-enhance-autoresample-v1
-```
-
-Relighting implementation snapshot should be tagged after it is validated in
-Comfy Desktop. Do not run the first Relighting Docker pull casually: the NIM
-image may be large, and the user should intentionally trigger it from the setup
-node.
-
-`nim-clients-upstream/` is ignored and should remain untracked. It was only used
-as a reference clone to vendor the generated Studio Voice proto files.
-
-## Future Work
-
-Likely next steps:
-
-- Add automatic optional resampling node/setting if the user wants it.
-- Add container logs/status output in the setup node after container start.
-- Validate Relighting end-to-end after the user accepts NGC terms and pulls
-  `nvcr.io/nim/nvidia/ai4m-relighting:1.1.0`.
-- Add support for other NVIDIA Maxine NIMs from `nim-clients`.
-- Add a UX wrapper or example workflow JSON once the Studio Voice flow is stable.
-
-Do not add an artificial Studio Voice "intensity" parameter unless the user
-approves a dry/wet local mix. The public Studio Voice proto currently transports
-only audio bytes and does not expose a native effect-intensity field.

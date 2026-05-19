@@ -115,23 +115,6 @@ class DockerPullProgress:
         if cleaned.startswith("Digest:") or cleaned.startswith("Status:"):
             _emit(self.progress, cleaned)
 
-    def consume_api_event(self, event: dict[str, object]) -> None:
-        layer_id = str(event.get("id") or "").strip()
-        status = str(event.get("status") or "").strip()
-        detail = event.get("progressDetail")
-        if layer_id and status:
-            current = None
-            total = None
-            if isinstance(detail, dict):
-                current_raw = detail.get("current")
-                total_raw = detail.get("total")
-                current = float(current_raw) if isinstance(current_raw, (int, float)) else None
-                total = float(total_raw) if isinstance(total_raw, (int, float)) else None
-            self._update_layer(layer_id, status, current=current, total=total)
-            self._emit_summary(force=status in ("Download complete", "Pull complete"))
-        elif status:
-            _emit(self.progress, status)
-
     def heartbeat(self) -> None:
         now = time.time()
         if now - self.last_heartbeat < PULL_HEARTBEAT_S:
@@ -404,59 +387,6 @@ def ngc_login(api_key: str, username: str = "$oauthtoken") -> CommandResult:
     return result
 
 
-def _split_image(image: str) -> tuple[str, str]:
-    if ":" not in image.rsplit("/", 1)[-1]:
-        return image, "latest"
-    repository, tag = image.rsplit(":", 1)
-    return repository, tag
-
-
-def _pull_image_engine_api(
-    api_key: str,
-    image: str,
-    username: str,
-    progress: Optional[ProgressCallback] = None,
-) -> Optional[CommandResult]:
-    try:
-        import docker  # type: ignore[import-not-found]
-    except Exception:
-        return None
-
-    repository, tag = _split_image(image)
-    tracker = DockerPullProgress(progress)
-    _emit(progress, "Using Docker Engine API pull stream for aggregate progress.")
-    try:
-        client = docker.APIClient()
-        events = client.pull(
-            repository,
-            tag=tag,
-            stream=True,
-            decode=True,
-            auth_config={"username": username, "password": api_key},
-        )
-        for event in events:
-            if isinstance(event, dict):
-                error = event.get("error")
-                if error:
-                    return CommandResult(False, str(error))
-                tracker.consume_api_event(event)
-                continue
-            if isinstance(event, bytes):
-                tracker.consume_cli_line(event.decode("utf-8", errors="replace"))
-            else:
-                tracker.consume_cli_line(str(event))
-            tracker.heartbeat()
-        _emit(progress, tracker.final_summary())
-        return CommandResult(True, f"NIM image is ready: {image}")
-    except Exception as exc:
-        _emit(
-            progress,
-            "Docker Engine API pull stream was unavailable; falling back to docker CLI. "
-            f"Reason: {exc.__class__.__name__}: {exc}",
-        )
-        return None
-
-
 def pull_image(
     api_key: str,
     image: str = DEFAULT_IMAGE,
@@ -470,16 +400,13 @@ def pull_image(
     if not login.ok:
         return CommandResult(False, "NGC Docker login failed:\n" + login.output)
     _emit(progress, f"Pulling {image_label} NIM image: {image}")
-    key = _effective_key(api_key)
-    pull = _pull_image_engine_api(key, image=image, username=username, progress=progress)
-    if pull is None:
-        tracker = DockerPullProgress(progress)
-        pull = _run_streaming(
-            ["docker", "pull", image],
-            timeout_s=3600,
-            progress=progress,
-            pull_progress=tracker,
-        )
+    tracker = DockerPullProgress(progress)
+    pull = _run_streaming(
+        ["docker", "pull", image],
+        timeout_s=3600,
+        progress=progress,
+        pull_progress=tracker,
+    )
     if pull.ok:
         return CommandResult(True, f"{login.output}\n{image_label} NIM image is ready: {image}")
     if access_instructions is None:

@@ -10,11 +10,9 @@ folder. They use ComfyUI's V3 custom node API.
 - ComfyUI with the V3 custom node API. The package has been developed against
   ComfyUI `0.21.0`.
 - Python packages from `requirements.txt`.
-- An NGC Personal API key with access to the NVIDIA NIM image you want to run.
+- An NGC Personal API key with access to the NVIDIA Studio Voice NIM image.
 
-Studio Voice is the supported workflow. Relighting nodes are currently blocked
-because the local Relighting NIM video runtime failed during inference in the
-tested Windows Docker Desktop environment.
+Studio Voice is the only supported workflow in this package.
 
 ## Manual Install
 

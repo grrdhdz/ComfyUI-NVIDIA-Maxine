@@ -10,7 +10,6 @@ Source: https://github.com/NVIDIA-Maxine/nim-clients
 Vendored interface files:
 
 - `studio_voice/interfaces/*`
-- `relighting/interfaces/*`
 
 The upstream `nim-clients` repository is published under the MIT License.
 Access to NVIDIA NIM container images, model artifacts, and NVIDIA services is
