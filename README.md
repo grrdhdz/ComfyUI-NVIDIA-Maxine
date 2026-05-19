@@ -5,6 +5,52 @@ workflow is Studio Voice for recorded-speech enhancement.
 
 ## Installation
 
+### 1. Install Docker Desktop
+
+1. Install Docker Desktop for Windows from the official Docker documentation:
+   https://docs.docker.com/desktop/setup/install/windows-install/
+2. During setup, use the WSL 2 backend. Docker documents GPU support on Windows
+   as available through the WSL2 backend:
+   https://docs.docker.com/desktop/features/gpu/
+3. Start Docker Desktop before running the setup node in ComfyUI.
+4. In Docker Desktop, confirm that `Settings -> General -> Use the WSL 2 based
+   engine` is enabled.
+
+You do not need to work inside WSL manually. These nodes call `docker.exe` from
+Windows/ComfyUI and Docker Desktop handles the Linux backend internally.
+
+### 2. Get an NVIDIA NGC API Key
+
+Studio Voice is distributed as an NVIDIA NIM image from NGC. NVIDIA's Studio
+Voice NIM getting-started page documents the local Docker image and NGC login
+flow:
+
+https://docs.nvidia.com/nim/maxine/studio-voice/latest/getting-started.html
+
+To prepare access:
+
+1. Sign in to NVIDIA/NGC.
+2. Open the Studio Voice NIM page and accept the terms if prompted:
+   https://build.nvidia.com/nvidia/studiovoice/deploy
+3. Create an NGC Personal API key from NVIDIA's NGC API Keys page:
+   https://org.ngc.nvidia.com/setup/api-keys
+4. When creating the Personal API key, include at least the `NGC Catalog`
+   service. NVIDIA documents this requirement in the Studio Voice NIM
+   getting-started page.
+5. Keep the key private. Saved ComfyUI workflows can retain widget values, so do
+   not share workflows that contain a real `ngc_api_key`.
+
+The Docker username is the literal value:
+
+```text
+$oauthtoken
+```
+
+The password is your NGC API key. The normal setup node already uses
+`$oauthtoken` internally, so most users only paste the API key.
+
+### 3. Install This Custom Node
+
 Clone this repository into ComfyUI's `custom_nodes` folder and install the
 Python dependencies with the same Python environment that runs ComfyUI:
 
@@ -27,10 +73,30 @@ Runtime requirements:
   ComfyUI `0.21.0`.
 - Docker Desktop on Windows with the WSL2 engine enabled.
 - NVIDIA GPU access from Docker.
-- NGC Personal API key with access to the NVIDIA NIM image.
+- NGC Personal API key with access to the NVIDIA Studio Voice NIM image.
 
 More detailed setup notes are in `docs/installation.md` and
 `docs/windows-docker-studio-voice.md`.
+
+## Example Workflow
+
+An example ComfyUI workflow is included at:
+
+```text
+workflows/nvidia_studio_voice_enhance.json
+```
+
+Import it in ComfyUI with `Workflow -> Open` or by dragging the JSON file into
+the ComfyUI canvas. The workflow's `ngc_api_key` field is intentionally blank.
+Paste your own key into `NVIDIA Studio Voice Docker Setup`, or leave the field
+blank and launch ComfyUI with `NGC_API_KEY` set in the environment.
+
+The example workflow uses this shape:
+
+```text
+NVIDIA Studio Voice Docker Setup -> NVIDIA Studio Voice Enhance
+Load Audio -----------------------> NVIDIA Studio Voice Enhance -> Preview/Save Audio
+```
 
 ## Studio Voice Workflow
 

@@ -57,6 +57,8 @@ Main files:
   from `NVIDIA-Maxine/nim-clients`.
 - `requirements.txt`: Python dependencies expected to be installed into the same
   environment that runs ComfyUI.
+- `workflows/nvidia_studio_voice_enhance.json`: importable example workflow with
+  the API key field intentionally blank.
 - `docs/installation.md`: clone/install instructions for other ComfyUI
   installations.
 - `docs/windows-docker-studio-voice.md`: Windows/Docker operational notes.
@@ -168,8 +170,7 @@ ComfyUI node
 ```
 
 During long pulls, logs are emitted to ComfyUI with aggregate progress and
-heartbeat messages. The implementation uses Docker CLI output parsing, not the
-Python Docker SDK.
+heartbeat messages. The implementation uses Docker CLI output parsing.
 
 ## Security Notes
 

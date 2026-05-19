@@ -1,0 +1,243 @@
+{
+  "id": "4c856b2b-5aaf-4249-bbe5-3a44b58db6fc",
+  "revision": 0,
+  "last_node_id": 13,
+  "last_link_id": 13,
+  "nodes": [
+    {
+      "id": 5,
+      "type": "NvidiaStudioVoiceEnhance",
+      "pos": [
+        720,
+        1340
+      ],
+      "size": [
+        340,
+        230
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "link": 13
+        },
+        {
+          "name": "studio_voice_connection",
+          "shape": 7,
+          "type": "STUDIO_VOICE_CONNECTION",
+          "link": 7
+        }
+      ],
+      "outputs": [
+        {
+          "name": "enhanced_audio",
+          "type": "AUDIO",
+          "links": [
+            3
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "NvidiaStudioVoiceEnhance"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 10,
+      "type": "NvidiaStudioVoiceDockerSetup",
+      "pos": [
+        720,
+        1140
+      ],
+      "size": [
+        340,
+        140
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "advanced_settings",
+          "shape": 7,
+          "type": "STUDIO_VOICE_SETUP_SETTINGS",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "studio_voice_connection",
+          "type": "STUDIO_VOICE_CONNECTION",
+          "links": [
+            7
+          ]
+        },
+        {
+          "name": "status",
+          "type": "STRING",
+          "links": [
+            6
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "NvidiaStudioVoiceDockerSetup"
+      },
+      "widgets_values": [
+        "setup_all_transactional",
+        ""
+      ]
+    },
+    {
+      "id": 9,
+      "type": "PreviewAny",
+      "pos": [
+        1090,
+        1140
+      ],
+      "size": [
+        290,
+        230
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "source",
+          "type": "*",
+          "link": 6
+        }
+      ],
+      "outputs": [
+        {
+          "name": "STRING",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "PreviewAny"
+      },
+      "widgets_values": [
+        null,
+        null,
+        null
+      ]
+    },
+    {
+      "id": 7,
+      "type": "PreviewAudio",
+      "pos": [
+        1090,
+        1420
+      ],
+      "size": [
+        290,
+        150
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "link": 3
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "Node name for S&R": "PreviewAudio"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 6,
+      "type": "LoadAudio",
+      "pos": [
+        350,
+        1140
+      ],
+      "size": [
+        340,
+        140
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "AUDIO",
+          "type": "AUDIO",
+          "links": [
+            13
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoadAudio"
+      },
+      "widgets_values": [
+        "voz-para-ia.wav",
+        null,
+        null
+      ]
+    }
+  ],
+  "links": [
+    [
+      3,
+      5,
+      0,
+      7,
+      0,
+      "AUDIO"
+    ],
+    [
+      6,
+      10,
+      1,
+      9,
+      0,
+      "STRING"
+    ],
+    [
+      7,
+      10,
+      0,
+      5,
+      1,
+      "STUDIO_VOICE_CONNECTION"
+    ],
+    [
+      13,
+      6,
+      0,
+      5,
+      0,
+      "AUDIO"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 1.0711814983151209,
+      "offset": [
+        -180.2784968750002,
+        -860.9083867361122
+      ]
+    },
+    "frontendVersion": "1.43.18",
+    "VHS_latentpreview": false,
+    "VHS_latentpreviewrate": 0,
+    "VHS_MetadataImage": true,
+    "VHS_KeepIntermediate": true
+  },
+  "version": 0.4
+}
